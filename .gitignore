@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Results/artifacts (regenerated; we don't version binary outputs)
+results/*.png
+results/_test_stego.png
+
+# Dataset (downloaded via script; we don't push BOSSBase into the repo)
+data/bossbase/
+data/covers/*.pgm
+
+# OS/IDE
+.DS_Store
+.idea/
+.vscode/
