@@ -9,9 +9,12 @@ venv/
 results/*.png
 results/_test_stego.png
 
-# Dataset (downloaded via script; we don't push BOSSBase into the repo)
+# Dataset (downloaded/generated via scripts; we don't push images into the repo)
 data/bossbase/
 data/covers/*.pgm
+data/alaska/raw_tif/
+data/alaska/covers/
+# note: data/alaska/manifest.csv (small) IS committed
 
 # OS/IDE
 .DS_Store

@@ -7,6 +7,13 @@ project from the Computer Forensics course
 
 ## Status
 
+**Day 4 -- dataset pipeline.** Real color carriers: a reproducible random subset
+(500 images, seed 42) of **ALASKA v2 TIFF 256 COLOR**, converted TIFF->PNG with
+**no resampling** (native 256x256 RGB, so no resize/crop -- preserves natural
+LSBs). On real covers the documented 255-saturation behavior is quantified:
+round-trip corruption occurs exactly on images with a 255 channel in the used
+embedding region (see `scripts/verify_dataset.py`).
+
 **Day 3 -- real key origin.** The stego key now comes from a passphrase:
 `scrypt` (fixed app salt) stretches it into a 32-byte master secret, then `HKDF`
 splits it into `k_enc` (AES-CTR key) and `seed` (reserved for future PRNG
@@ -42,16 +49,21 @@ lib/          # clean, parameterized library (default config == baseline)
   embedding.py     # parameterized embed/extract core
   algorithm.py     # StegAlgorithm: hide() / expose() (passphrase= or key=)
   keyexchange.py   # DEPRECATED in-process RSA/DH simulation (called nowhere)
+  rates.py         # embedding-rate constants (fraction of capacity) for Day 5+
 scripts/
-  run_baseline.py  # baseline control-group demo
-  run_stego.py     # lib demo, key from --passphrase
+  run_baseline.py      # baseline control-group demo
+  run_stego.py         # lib demo, key from --passphrase
+  download_alaska.py   # fetch a seeded ALASKA v2 TIFF-256-COLOR subset (http)
+  prepare_dataset.py   # TIFF -> lossless PNG covers + manifest (no resampling)
+  verify_dataset.py    # read-only report: round-trip + 255-saturation finding
 tests/
   test_baseline_roundtrip.py   # baseline round-trip
   test_lib_parity.py           # lib default == baseline, byte-for-byte
   test_lib_roundtrip.py        # lib round-trip (raw key + passphrase, dual-input guard)
   test_lib_hooks.py            # non-default switches raise NotImplementedError
   test_lib_crypto_keyderiv.py  # passphrase -> (k_enc, seed) derivation
-data/covers/  # synthetic test PNGs (BOSSBase pipeline = Day 4)
+data/covers/  # synthetic test PNGs (gradient/noise/saturated)
+data/alaska/  # ALASKA v2 covers: raw_tif/ + covers/ (git-ignored), manifest.csv (committed)
 results/      # output stego PNGs (git-ignored)
 ```
 
@@ -122,6 +134,32 @@ Intentionally-kept properties (documented, **not** fixed here):
   the same key.
 - **Fixed scrypt salt** -> the same passphrase always yields the same master
   secret (reproducible, no per-run randomness).
+
+## Dataset (Day 4)
+
+Real carriers are a reproducible random subset of **ALASKA v2 TIFF 256 COLOR**
+(the algorithm is RGB, so native color covers avoid the R=G=B artifact a
+grayscale->RGB set would introduce).
+
+```bash
+# 1. download a seeded subset of 500 native-256x256 TIFFs
+python scripts/download_alaska.py          # -> data/alaska/raw_tif/  (N=500, seed 42)
+
+# 2. TIFF -> lossless PNG (NO resize/crop) + manifest with a 50/50 train/test split
+python -m scripts.prepare_dataset --src data/alaska/raw_tif --out data/alaska/covers --seed 42
+
+# 3. read-only verification report (round-trip + 255-saturation finding)
+python -m scripts.verify_dataset --covers data/alaska/covers --n 100 --seed 42
+```
+
+Notes:
+- Images are served over `http://`; the server's **expired HTTPS certificate**
+  only affects browser viewing, not the http downloads (the script tolerates an
+  http->https redirect via `ssl.CERT_NONE`).
+- No resampling: the TIFFs are already 256x256 RGB, so PNG conversion preserves
+  the natural LSBs. Any image not exactly 256x256x3 is skipped and reported.
+- Capacity is `(256 // 3) * 256 = 21760` characters per cover.
+- Only `manifest.csv` is committed; `raw_tif/` and `covers/` are git-ignored.
 
 ## Known baseline behaviors (confirmed Day 1)
 
