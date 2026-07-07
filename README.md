@@ -208,6 +208,54 @@ distortion intensity is the same regardless of payload size. They converge at
 rate 1.0 (sanity check). Round-trip failures rise monotonically with rate,
 confirming the 255-saturation bug scales with coverage.
 
+## Detectability: chi-square (Day 6)
+
+First forensic detector, plus a **reusable evaluation harness**
+(`analysis/detection.py`: AUC, P_E, ROC) that every later detector (RS/SPA/ML,
+Days 7-10) reuses. Convention: a detector maps each image to a score, **higher =
+more likely stego**; the harness only compares cover-scores vs stego-scores.
+
+`analysis/chi_square.py` implements the Westfeld Pairs-of-Values attack:
+
+- **Global** -- one score per image. Per channel: PoV statistic on pairs
+  {2i, 2i+1}; score = `chi2.sf(stat, df)` (the "probability of embedding").
+  Channels combined by pooling statistics (sum of stats, sum of df), per decision D.
+- **Positional** -- the p-value along a growing raster prefix; the "cliff" where
+  the equalized region ends localizes the sequential payload.
+
+Evaluation on the canonical **test-250** (comparable with later ML) and,
+additionally, on **all 500** (robustness). P_E is orientation-agnostic (the
+statistic's true detection power, optimal threshold in either direction); AUC is
+kept orientation-sensitive so the *sign* of the effect stays visible.
+
+```bash
+python -m scripts.run_chisquare --covers data/alaska/covers
+python -m scripts.plot_chisquare        # -> results/figures/chisquare_*.png
+```
+
+Result (baseline, combined score; test-250):
+
+| rate | AUC | P_E | AUC_R | AUC_G | AUC_B |
+|------|-----|-----|-------|-------|-------|
+| 0.05 | 0.487 | 0.464 | 0.502 | 0.504 | 0.464 |
+| 0.10 | 0.456 | 0.420 | 0.507 | 0.504 | 0.392 |
+| 0.25 | 0.352 | 0.308 | 0.514 | 0.513 | 0.224 |
+| 0.50 | 0.229 | 0.162 | 0.531 | 0.519 | 0.109 |
+| 1.00 | 0.092 | 0.092 | 0.573 | 0.559 | 0.032 |
+
+Findings (reported, not "fixed"):
+
+- **The baseline's "+1" matching does not equalize PoV pairs** the way textbook
+  LSB replacement does, so classic chi-square is not merely weak -- its p-value is
+  *anti-correlated* with embedding (AUC falls below 0.5, down to 0.09 at full rate).
+  The statistic is still discriminative; its textbook orientation is inverted.
+- **Weak at low rates, strong at high** (P_E 0.46 -> 0.09): a small sequential
+  region barely shifts the whole-image histogram. The **positional** mode exposes
+  embedding even at low rates via the cliff (see `chisquare_positional_example.png`).
+- **The signal is concentrated in the blue channel** (AUC_B 0.03 vs AUC_R/G ~0.5-0.57
+  at full rate): the continuation flag rides the 9th channel (pixel-2 blue), leaving
+  a systematic per-pair artifact there. This motivates RS/SPA/ML next.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we
