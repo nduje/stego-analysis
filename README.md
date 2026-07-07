@@ -161,6 +161,53 @@ Notes:
 - Capacity is `(256 // 3) * 256 = 21760` characters per cover.
 - Only `manifest.csv` is committed; `raw_tif/` and `covers/` are git-ignored.
 
+## Imperceptibility analysis (Day 5)
+
+Fidelity of the **baseline** across embedding rates (improvements are measured
+later, for a before/after). Methodology:
+
+- **(A) Global vs region.** Every metric is reported both over the whole image
+  (**global**) and over only the pixels the algorithm touched (**region**). At
+  low rates the global number is dominated by the untouched area, so it mostly
+  reflects *coverage*; the region number isolates *distortion intensity*. The
+  region mask is taken by replaying the algorithm's own raster block iterator for
+  the payload length (not a formula), so it matches the real path including the
+  skipped `x+2 >= width` column. SSIM (windowed) uses the region's bounding-box
+  row band -- a documented approximation. Sanity: at rate 1.0 region ~= global.
+- **(B) Channels.** MSE/PSNR: combined RGB + per-channel R,G,B + luminance Y.
+  SSIM: per-channel average + Y. `Y = 0.299R + 0.587G + 0.114B` (BT.601).
+  PSNR peak = 255; SSIM `data_range=255`, `win_size=7`.
+- **(C) Payload.** Reproducible printable-ASCII of length `L = round(rate*21760)`;
+  content is statistically irrelevant (AES whitening), only `L` matters. Fixed
+  raw key (fast, reproducible; not scrypt per image). Payload seed = `f(image, rate)`.
+- **(D) Aggregation.** mean +/- std over the 500 covers per rate, plus the
+  round-trip failure fraction per rate.
+
+```bash
+python -m scripts.measure_imperceptibility --covers data/alaska/covers --workers 16
+python -m scripts.plot_imperceptibility        # -> results/figures/*.png
+```
+
+Outputs: `results/imperceptibility.csv` (per image x rate; git-ignored),
+`results/imperceptibility_summary.csv` (per rate; committed), and four figures in
+`results/figures/` (committed).
+
+Result (baseline, n=500 covers per rate):
+
+| rate | PSNR global RGB | PSNR region RGB | SSIM global | SSIM region | round-trip fail |
+|------|-----------------|-----------------|-------------|-------------|-----------------|
+| 0.05 | 64.18 dB | 51.15 dB | 0.9999 | 0.9982 | 10.6% |
+| 0.10 | 61.17 dB | 51.15 dB | 0.9998 | 0.9982 | 12.4% |
+| 0.25 | 57.19 dB | 51.15 dB | 0.9996 | 0.9983 | 16.6% |
+| 0.50 | 54.18 dB | 51.15 dB | 0.9992 | 0.9983 | 21.0% |
+| 1.00 | 51.17 dB | 51.15 dB | 0.9983 | 0.9983 | 25.6% |
+
+The **global** metric changes with rate (it tracks *coverage*), while the
+**region** metric is essentially flat (~51.15 dB / ~0.998) -- the per-pixel
+distortion intensity is the same regardless of payload size. They converge at
+rate 1.0 (sanity check). Round-trip failures rise monotonically with rate,
+confirming the 255-saturation bug scales with coverage.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we

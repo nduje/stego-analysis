@@ -5,9 +5,11 @@ cryptography>=44
 # Already using / needed soon (analysis, plots):
 numpy>=2
 
+# Day 5 -- fidelity metrics + plots:
+scipy>=1.13            # stats (also a scikit-image dependency)
+matplotlib>=3.9        # PSNR/SSIM plots, charts
+scikit-image>=0.24     # SSIM
+
 # Coming later (uncomment when needed):
-# scipy>=1.13          # Day 6+ (chi-square, statistics)
-# matplotlib>=3.9      # Day 5+ (PSNR/SSIM plots, charts)
-# scikit-image>=0.24   # Day 5+ (SSIM)
 # scikit-learn>=1.5    # Day 9+ (ensemble classifier)
 # pytest>=8            # tests

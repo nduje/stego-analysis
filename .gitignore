@@ -8,6 +8,10 @@ venv/
 # Results/artifacts (regenerated; we don't version binary outputs)
 results/*.png
 results/_test_stego.png
+# large per-image sweep table (regenerated); the summary + figures ARE committed
+results/imperceptibility.csv
+results/_*.csv
+# note: results/imperceptibility_summary.csv and results/figures/*.png ARE committed
 
 # Dataset (downloaded/generated via scripts; we don't push images into the repo)
 data/bossbase/
