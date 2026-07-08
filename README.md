@@ -256,6 +256,45 @@ Findings (reported, not "fixed"):
   at full rate): the continuation flag rides the 9th channel (pixel-2 blue), leaving
   a systematic per-pair artifact there. This motivates RS/SPA/ML next.
 
+## Detectability: RS analysis (Day 7)
+
+`analysis/rs_analysis.py` implements the Fridrich-Goljan-Du RS (Regular/Singular)
+method: groups of 4 pixels in a row, mask `[0,1,1,0]`, smoothness
+`f=Σ|xᵢ₊₁−xᵢ|`, flips `F1(x)=x⊕1` / `F₋₁(x)=((x+1)⊕1)−1`. It both **detects**
+(p̂ as score → harness) and **estimates the rate** (p̂ via the RS quadratic).
+Standard RS (flip = XOR 1); channels combined by mean p̂ (decision C).
+
+```bash
+python -m scripts.run_rs --covers data/alaska/covers
+python -m scripts.plot_rs        # -> results/figures/rs_*.png
+```
+
+Result (baseline, combined; test-250):
+
+| rate | AUC | P_E | mean p̂ | bias | MAE | AUC_R | AUC_G | AUC_B |
+|------|-----|-----|--------|------|-----|-------|-------|-------|
+| 0.05 | 0.492 | 0.484 | 0.079 | +0.029 | 0.109 | 0.495 | 0.509 | 0.497 |
+| 0.10 | 0.495 | 0.484 | 0.074 | −0.026 | 0.137 | 0.494 | 0.505 | 0.497 |
+| 0.25 | 0.509 | 0.472 | 0.069 | −0.181 | 0.241 | 0.511 | 0.506 | 0.493 |
+| 0.50 | 0.496 | 0.470 | 0.058 | −0.442 | 0.465 | 0.468 | 0.525 | 0.500 |
+| 1.00 | 0.496 | 0.466 | 0.032 | −0.968 | 0.968 | 0.464 | 0.496 | 0.503 |
+
+(cover mean p̂ ≈ 0.083.) Findings (reported, not "fixed"):
+
+- **Standard RS fails on "+1".** Detection AUC ≈ 0.5 (chance) at every rate and
+  every channel; unlike LSB replacement, "+1" does not create the RS
+  regular/singular imbalance. This is **weaker than chi-square** here (which at
+  least caught the blue-channel flag artifact) -- contradicting the usual "RS beats
+  chi-square at low rates" expectation *for this algorithm*.
+- **The rate estimate collapses:** p̂ stays ≈ the cover value (~0.08) regardless of
+  the true rate, so the bias grows to −0.97 at full rate. RS effectively always
+  reports "no message" (see `rs_estimated_vs_true_rate.png`).
+- The estimator is validated on textbook LSB replacement (test: p̂ → 1), so the
+  failure is genuinely "+1" evading RS, not an implementation error.
+
+Two classic, LSB-replacement-tuned attacks (chi-square, RS) thus miss (or invert)
+on the "+1" design -- direct motivation for the learned detectors on Days 9-10.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we
