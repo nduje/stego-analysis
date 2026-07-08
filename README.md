@@ -295,6 +295,44 @@ Result (baseline, combined; test-250):
 Two classic, LSB-replacement-tuned attacks (chi-square, RS) thus miss (or invert)
 on the "+1" design -- direct motivation for the learned detectors on Days 9-10.
 
+## Detectability: SPA (Day 8)
+
+`analysis/spa.py` implements Dumitrescu-Wu-Wang Sample Pair Analysis over
+horizontally adjacent pairs (u,v): trace sets X, Y, W (LSB-differ, ⊂ Y), Z (equal)
+→ quadratic `0.5(W+Z)p² + (2X−P)p + (Y−X) = 0`, smaller-magnitude root → p̂.
+Standard SPA (flip = LSB); channels combined by mean p̂. Same detection +
+estimation protocol as RS, for direct comparison.
+
+```bash
+python -m scripts.run_spa --covers data/alaska/covers
+python -m scripts.plot_spa        # -> results/figures/spa_*.png + rs_vs_spa_estimate.png
+```
+
+Result (baseline, combined; test-250):
+
+| rate | AUC | P_E | mean p̂ | bias | AUC_B |
+|------|-----|-----|--------|------|-------|
+| 0.05 | 0.497 | 0.484 | 0.041 | −0.009 | 0.494 |
+| 0.25 | 0.509 | 0.472 | 0.038 | −0.212 | 0.493 |
+| 0.50 | 0.502 | 0.460 | 0.035 | −0.465 | 0.484 |
+| 1.00 | 0.485 | 0.438 | 0.031 | −0.969 | 0.481 |
+
+(cover p̂ ≈ 0.042.) Findings (confirmatory):
+
+- **SPA behaves like RS on "+1":** detection AUC ≈ 0.5 (chance) at every rate and
+  channel; the rate estimate stays ≈ the cover level regardless of the true rate
+  (bias → −0.97). SPA's finite-state model assumes a symmetric LSB flip, which
+  "+1" is not.
+- **RS and SPA agree** (`rs_vs_spa_estimate.png`): two independent rate estimators
+  both collapse to ~cover on "+1" -- an internal-consistency check that the miss
+  is a property of "+1", not of one estimator.
+
+**Summary of the classical structural attacks (Days 6-8):** all three are tuned
+to LSB replacement and none works on the "+1" design -- chi-square is inverted
+(signal only via the blue-channel flag artifact), RS and SPA are blind (chance
+detection, collapsed rate estimates). This is the empirical case for the learned
+detectors on Days 9-10.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we

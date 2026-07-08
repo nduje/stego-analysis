@@ -13,6 +13,7 @@ results/imperceptibility.csv
 results/chisquare_scores.csv
 results/chisquare_positional.csv
 results/rs_scores.csv
+results/spa_scores.csv
 results/_*.csv
 # note: results/*_summary.csv and results/figures/*.png ARE committed
 
