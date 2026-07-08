@@ -1,5 +1,8 @@
 """Westfeld chi-square (Pairs-of-Values) detector.
 
+Reference: A. Westfeld, A. Pfitzmann, "Attacks on Steganographic Systems",
+Information Hiding, LNCS 1768, Springer, 2000, pp. 61-76.
+
 Classic PoV attack: LSB replacement drives each pair {2i, 2i+1} toward equal
 counts, so the chi-square statistic testing "the two members of each pair are
 equal" becomes small -> its survival-function p-value (the "probability of

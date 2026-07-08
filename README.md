@@ -345,3 +345,43 @@ do not criticize:
    embedding is dropped, decoding reads garbage. Tied to Improvement 3
    (255 edge-case fix).
 3. Plain ASCII on a non-saturated cover: **round-trip OK**.
+
+## References
+
+Sources for the implemented formulas (for citation in the written thesis).
+
+**Steganalysis methods** (`analysis/`):
+
+- **Chi-square / Pairs-of-Values attack** (Day 6, `analysis/chi_square.py`) --
+  A. Westfeld, A. Pfitzmann, "Attacks on Steganographic Systems," in *Information
+  Hiding*, LNCS 1768, Springer, 2000, pp. 61-76.
+- **RS analysis** (Day 7, `analysis/rs_analysis.py`) -- J. Fridrich, M. Goljan,
+  R. Du, "Reliable Detection of LSB Steganography in Color and Grayscale Images,"
+  in *Proc. ACM Workshop on Multimedia and Security*, 2001, pp. 27-30.
+- **Sample Pair Analysis** (Day 8, `analysis/spa.py`) -- S. Dumitrescu, X. Wu,
+  Z. Wang, "Detection of LSB Steganography via Sample Pair Analysis," *IEEE Trans.
+  Signal Processing*, vol. 51, no. 7, 2003.
+  Authors' copy (used for the equations):
+  <https://www.ece.mcmaster.ca/~sorina/papers/LSBfinalTSP.pdf>.
+  Trace-set / quadratic cross-check:
+  <https://steveryan.net/steganalysis-sample-pairs-analysis-explained.html>.
+  (Verify the exact page numbers against the source before citing -- indexed
+  listings disagree, e.g. pp. 1995-2007 vs pp. 355-372.)
+
+**Fidelity metrics** (Day 5, `lib/metrics.py`):
+
+- **SSIM** -- Z. Wang, A. C. Bovik, H. R. Sheikh, E. P. Simoncelli, "Image Quality
+  Assessment: From Error Visibility to Structural Similarity," *IEEE Trans. Image
+  Processing*, vol. 13, no. 4, 2004, pp. 600-612 (via scikit-image
+  `structural_similarity`).
+- **PSNR** -- standard peak-signal-to-noise ratio (peak = 255).
+- **Luminance (Y)** -- ITU-R Recommendation BT.601 (Y = 0.299R + 0.587G + 0.114B).
+
+**Dataset** (Day 4):
+
+- **ALASKA v2** -- R. Cogranne, Q. Giboulot, P. Bas, "ALASKA-2: Challenging
+  Academic Research on Steganalysis with Realistic Images," in *IEEE Int. Workshop
+  on Information Forensics and Security (WIFS)*, 2020. Dataset: <http://alaska.utt.fr>.
+
+All citation details (especially page numbers) should be verified against the
+primary sources before inclusion in the written work.
