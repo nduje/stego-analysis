@@ -333,6 +333,40 @@ to LSB replacement and none works on the "+1" design -- chi-square is inverted
 detection, collapsed rate estimates). This is the empirical case for the learned
 detectors on Days 9-10.
 
+## Detectability: machine learning setup (Day 9)
+
+The classical attacks (Days 6-8) are model-based -- they assume LSB replacement
+and miss "+1". A learned detector assumes no mechanism; it learns the traces from
+data. This is the real test of the algorithm.
+
+- **Features: SCRM** (Spatial Color Rich Model, q=1; DDE `SCRMQ1`). Color, **not**
+  grayscale SRM -- the flag signal lives in the blue channel, and a grayscale
+  model would flatten color and could dilute exactly that trace.
+- **Extraction:** the DDE `SCRMQ1.m` is driven directly through Octave by
+  `scripts/extract_scrm.py` (self-contained; it does not import Aletheia's Python
+  stack, avoiding TensorFlow/pandas). Octave is installed as the portable build.
+- **Classifier + evaluation are ours** (Day 10), through the same
+  `analysis/detection.py` harness, so ML numbers land in the SAME AUC/P_E table as
+  chi-square/RS/SPA.
+- **Protocol:** one classifier per rate (5 curves), train on train-250, test on
+  test-250 (from the manifest).
+- **No leakage** (critical): a cover and its stego share the manifest split (keyed
+  by filename), so the classifier cannot learn the scene instead of the embedding
+  (`analysis/ml_features.py`, enforced in `tests/test_ml_features.py`).
+
+```bash
+# 1. stego sets (baseline, fixed key), git-ignored; one rate at a time if disk is tight
+python -m scripts.make_stego_sets --rate 1.0
+
+# 2. SCRM features via Octave (slow; single-threaded)
+python -m scripts.extract_scrm --images data/alaska/covers      --out data/alaska/features/covers   --octave <octave-cli>
+python -m scripts.extract_scrm --images data/alaska/stego/r1.0  --out data/alaska/features/stego_r1.0 --octave <octave-cli>
+```
+
+Everything heavy is git-ignored (`data/alaska/stego/`, `data/alaska/features/`,
+`*.fea`, `aletheia/`, `octave/`); only the code is versioned. Training,
+evaluation, and P_E/AUC-vs-rate curves are Day 10.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we

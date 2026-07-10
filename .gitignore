@@ -22,7 +22,15 @@ data/bossbase/
 data/covers/*.pgm
 data/alaska/raw_tif/
 data/alaska/covers/
+data/alaska/stego/
+data/alaska/features/
 # note: data/alaska/manifest.csv (small) IS committed
+
+# ML steganalysis: features + external tools (never versioned)
+*.fea
+aletheia/
+octave/
+octave-*.zip
 
 # OS/IDE
 .DS_Store
