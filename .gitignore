@@ -31,6 +31,12 @@ data/alaska/features/
 aletheia/
 octave/
 octave-*.zip
+# Day 10: StegExpose + portable JRE
+*.jar
+stegexpose/
+temurin*/
+temurin-jre.zip
+jre*/
 
 # OS/IDE
 .DS_Store

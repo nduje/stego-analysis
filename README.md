@@ -367,6 +367,70 @@ Everything heavy is git-ignored (`data/alaska/stego/`, `data/alaska/features/`,
 `*.fea`, `aletheia/`, `octave/`); only the code is versioned. Training,
 evaluation, and P_E/AUC-vs-rate curves are Day 10.
 
+## Detectability: machine learning + whole-spectrum comparison (Day 10)
+
+The learned detector closes the baseline assessment. Unlike chi2/RS/SPA it assumes
+no embedding mechanism -- it learns the traces from the SCRM features.
+
+- **Detectors** (`analysis/ml_classifier.py`): an FLD **ensemble** (sklearn
+  equivalent of Kodovsky-Fridrich: bagged LDA on random 256-feature subspaces) and
+  a linear **SVM** control (standardize + `LinearSVC`, C=0.01 for the p>>n regime).
+  No PCA. Scores go through our harness, so ML sits in the same P_E/AUC table.
+- **Protocol** (`scripts/run_ml_detection.py`): per rate, **10 random 250/250 image
+  splits** (leakage-free -- an image's cover and stego stay on the same side),
+  train both models, report mean +/- std.
+
+ML detection (test protocol, 10 splits):
+
+| rate | ensemble AUC / P_E | SVM AUC / P_E |
+|------|--------------------|---------------|
+| 0.05 | 0.578 / 0.431 | 0.619 / 0.397 |
+| 0.10 | 0.668 / 0.368 | 0.746 / 0.303 |
+| 0.25 | 0.855 / 0.217 | 0.923 / 0.132 |
+| 0.50 | 0.964 / 0.090 | 0.979 / 0.051 |
+| 1.00 | 0.997 / 0.020 | 0.996 / 0.012 |
+
+Ensemble and SVM agree (robust); detection climbs from near-chance at the smallest
+payload to near-perfect at full rate.
+
+**Where is the signal?** (`scripts/run_ml_groups.py`) Decision 4 asked for an R/G/B
+split, but **SCRM has no clean per-channel decomposition** -- its 69 submodels are
+either spatial (12753 dims) or 3D cross-channel "color" cooccurrences (5404 dims,
+submodel type ending in `c`). So we compare spatial vs color feature groups
+instead (documented deviation). Finding: at low rates the **color/cross-channel
+features carry slightly more signal** than the spatial ones (r=0.05 AUC 0.595 vs
+0.567), despite being fewer -- consistent with the flag perturbing the blue channel
+and creating cross-channel structure (not a direct R/G/B proof).
+
+**StegExpose** (`scripts/run_stegexpose.py`), an illustrative practitioner baseline
+(threshold-dependent, prone to false alarms; fuses Primary Sets / Chi-Square /
+Sample Pairs / RS): near-chance at every rate (AUC 0.51-0.55, P_E 0.44-0.46) -- it
+misses "+1" like RS/SPA, as expected.
+
+### Whole-spectrum comparison (P_E vs rate, test-250; lower = better)
+
+| rate | chi2 | RS | SPA | **ML (ens)** | StegExpose |
+|------|------|-----|-----|----------|------------|
+| 0.05 | 0.464 | 0.484 | 0.484 | **0.431** | 0.458 |
+| 0.10 | 0.420 | 0.484 | 0.478 | **0.368** | 0.466 |
+| 0.25 | 0.308 | 0.472 | 0.472 | **0.217** | 0.460 |
+| 0.50 | 0.162 | 0.470 | 0.460 | **0.090** | 0.456 |
+| 1.00 | 0.092 | 0.466 | 0.438 | **0.020** | 0.442 |
+
+The learned detector is strongest at **every** rate and the only method that
+detects meaningfully at low payloads; chi-square is second (via the blue-channel
+flag artifact); RS, SPA and StegExpose sit near chance. This full spectrum --
+hand-crafted -> learned -> off-the-shelf tool -- is the firm "before" baseline for
+the before/after comparison against Improvements 1-3 (Days 11-13). See
+`results/figures/all_attacks_comparison.png`.
+
+```bash
+python -m scripts.run_ml_detection          # ensemble + SVM -> ml_summary.csv
+python -m scripts.run_ml_groups --octave <octave-cli>   # spatial vs color -> ml_group.csv
+python -m scripts.run_stegexpose --java <java> --jar StegExpose.jar
+python -m scripts.plot_ml                    # all figures incl. all_attacks_comparison.png
+```
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we

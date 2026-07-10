@@ -49,3 +49,23 @@ def build_dataset(cover_stem, stego_stem, manifest_path):
     X_test = np.vstack([Xc_te, Xs_te])
     y_test = np.concatenate([yc_te, ys_te])
     return X_train, y_train, X_test, y_test
+
+
+def random_paired_split(n_images, seed, test_frac=0.5):
+    """Random split of image INDICES into (train, test).
+
+    Splitting by image index (not by row) keeps an image's cover and stego rows on
+    the SAME side -> no scene leakage. Used for the 10-repeat ML protocol.
+    """
+    rng = np.random.default_rng(seed)
+    idx = rng.permutation(n_images)
+    n_test = int(round(n_images * test_frac))
+    return idx[n_test:], idx[:n_test]
+
+
+def assemble(Xc, Xs, image_idx):
+    """Stack cover+stego rows for the given image indices -> (X, y) with cover=0, stego=1."""
+    X = np.vstack([Xc[image_idx], Xs[image_idx]])
+    y = np.concatenate([np.zeros(len(image_idx), dtype=np.int64),
+                        np.ones(len(image_idx), dtype=np.int64)])
+    return X, y

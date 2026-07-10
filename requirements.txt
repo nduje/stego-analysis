@@ -10,6 +10,8 @@ scipy>=1.13            # stats (also a scikit-image dependency)
 matplotlib>=3.9        # PSNR/SSIM plots, charts
 scikit-image>=0.24     # SSIM
 
+# Day 10 -- ML steganalysis:
+scikit-learn>=1.5      # ensemble (FLD) + SVM detectors
+
 # Coming later (uncomment when needed):
-# scikit-learn>=1.5    # Day 9+ (ensemble classifier)
 # pytest>=8            # tests
