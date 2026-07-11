@@ -62,13 +62,24 @@ def derive_keys(passphrase):
     """passphrase -> (k_enc, seed): two independent 32-byte keys.
 
     Domain separation (distinct HKDF `info`) guarantees k_enc != seed despite the
-    shared master secret. `seed` is derived but unused today (pixel_order stays
-    sequential; PRNG order is a future improvement).
+    shared master secret. `seed` seeds the PRNG embed order (Improvement 1).
     """
     master = derive_master(passphrase)
     k_enc = _hkdf(master, _INFO_ENC)
     seed = _hkdf(master, _INFO_ORDER)
     return k_enc, seed
+
+
+def seed_from_key(key):
+    """Deterministic 32-byte PRNG seed from a raw key (the parity/experiment path).
+
+    Normalizes the key the same way encrypt_message does (base64-decode if a str),
+    then SHA-256 -- so the same raw key always yields the same embed-order seed,
+    independent of the encryption key.
+    """
+    if isinstance(key, str):
+        key = base64.b64decode(key)
+    return hashlib.sha256(key).digest()
 
 
 def bitstring_to_bytes(bitstring):

@@ -431,6 +431,43 @@ python -m scripts.run_stegexpose --java <java> --jar StegExpose.jar
 python -m scripts.plot_ml                    # all figures incl. all_attacks_comparison.png
 ```
 
+## Improvement 1: PRNG block order (Day 11)
+
+The baseline embeds sequentially (raster), creating one contiguous payload region
+with a sharp boundary -- the "cliff" that positional analysis can localize.
+**Improvement 1** permutes the 3-pixel blocks with a **key-seeded PRNG**, scattering
+the payload so no such region/boundary exists.
+
+- **Switch:** `StegoConfig(pixel_order="prng")` (previously an inert hook).
+- **Granularity:** whole **blocks** (3-pixel cells, one per character) are permuted,
+  preserving the "3 pixels = 1 character" structure (decision A).
+- **Isolation (decision B):** *only* the order changes. The "+1" matching, the
+  continuation flag, and the 255-skip are untouched, so any measured effect is
+  attributable purely to ordering. The decoder regenerates the **same** permutation
+  and walks it, reading the continuation flag until the terminator -- so P1 is
+  independent of the length-header work (Improvement 3).
+- **Seed (decisions C/D):** `numpy` `default_rng` (PCG64, version-stable) seeded by
+  the full 32-byte `seed` as a big int. The seed comes from `crypto.derive_keys`
+  (passphrase/HKDF) or `crypto.seed_from_key` = `sha256(raw key)` -- so the same key
+  always yields the same permutation, on both key paths.
+
+`baseline/` stays frozen and `pixel_order="sequential"` is **byte-for-byte
+unchanged** (the parity test still passes) -- it is the exact "before" control. For
+PRNG, parity with the baseline is *intentionally* lost (that is the behavior change),
+so `tests/test_prng_order.py` checks prng's own round-trip, determinism,
+seed-sensitivity, and that it truly differs from sequential.
+
+```python
+from lib import StegAlgorithm, StegoConfig
+alg = StegAlgorithm(StegoConfig(pixel_order="prng"))
+alg.hide("secret", "cover.png", "out.png", passphrase="pw")   # scattered embedding
+alg.expose(load_image("out.png"), passphrase="pw")            # same permutation regenerated
+```
+
+The measurement of whether the positional cliff actually disappears (and any
+secondary effect on the ML detector) is deferred to the re-analysis phase
+(Days 14-17); Day 11 delivers the implementation, round-trip correctness, and tests.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we

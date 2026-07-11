@@ -14,7 +14,8 @@ matching_mode    : str   "plus_one" (default) | "pm_one"
     "pm_one" (LSB matching, +/-1) is a future improvement.
 pixel_order      : str   "sequential" (default) | "prng"
     Order in which 3-pixel blocks are visited. Baseline is raster/sequential.
-    "prng" (key-seeded permutation) is a future improvement.
+    "prng" (Improvement 1) permutes the blocks with a key-seeded PRNG, scattering
+    the payload so the sequential "cliff" (positional chi-square) disappears.
 termination      : str   "continuation_flag" (default) | "length_header"
     How the decoder knows where the payload ends. Baseline uses the 9th-channel
     continuation flag. "length_header" is a future improvement (also fixes the
@@ -30,7 +31,7 @@ from dataclasses import dataclass
 # value -> is it implemented on Day 2?  (False == inert hook)
 _SWITCHES = {
     "matching_mode":  {"plus_one": True,          "pm_one": False},
-    "pixel_order":    {"sequential": True,        "prng": False},
+    "pixel_order":    {"sequential": True,        "prng": True},
     "termination":    {"continuation_flag": True, "length_header": False},
     "saturation_255": {"skip": True,              "fix": False},
 }

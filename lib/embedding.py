@@ -14,6 +14,8 @@ are identical to the baseline.
 Channel layout of a 3-pixel block (indices 0..8):
     0,1,2 = pixel0 R,G,B    3,4,5 = pixel1 R,G,B    6,7 = pixel2 R,G    8 = pixel2 B (flag)
 """
+import numpy as np
+
 from lib.config import StegoConfig
 
 _DATA_CHANNELS = 8   # channels 0..7 carry data; channel 8 is the continuation flag
@@ -34,6 +36,26 @@ def _iter_blocks(width, height, config):
         for x in range(0, width, 3):
             if x + 2 < width:
                 yield x, y
+
+
+def _ordered_blocks(width, height, config, seed):
+    """The usable blocks in the configured visiting order.
+
+    'sequential' returns raster order (identical to _iter_blocks, so the baseline
+    stays byte-for-byte). 'prng' (Improvement 1) permutes that list with a PRNG
+    seeded by the 32-byte `seed` -- scattering the payload so the sequential
+    "cliff" vanishes. Only the ORDER changes; the "+1" matching, the continuation
+    flag and the 255-skip are untouched, so any effect is due to ordering alone.
+    """
+    raster = list(_iter_blocks(width, height, config))
+    if config.pixel_order == "sequential":
+        return raster
+    if config.pixel_order == "prng":
+        if seed is None:
+            raise ValueError("pixel_order='prng' requires a seed")
+        rng = np.random.default_rng(int.from_bytes(seed, "big"))
+        return [raster[i] for i in rng.permutation(len(raster))]
+    raise ValueError(f"unknown pixel_order {config.pixel_order!r}")
 
 
 def _match_channel(value, bit, config):
@@ -62,11 +84,12 @@ def _apply_continuation_flag(blue_value, more_follows, config):
     return blue_value
 
 
-def embed(char_matrix, image, char_count, config=None):
+def embed(char_matrix, image, char_count, config=None, seed=None):
     """Embed `char_count` characters (8-bit int lists) into `image` in place.
 
     Returns the mutated image, or False if the message does not fit -- same
-    contract as baseline.image_utils.encode_message.
+    contract as baseline.image_utils.encode_message. `seed` is required only for
+    pixel_order='prng'.
     """
     config = config or StegoConfig()
     config.validate()
@@ -76,9 +99,9 @@ def embed(char_matrix, image, char_count, config=None):
         print("The message is too large.")
         return False
 
-    blocks = _iter_blocks(width, height, config)
+    blocks = _ordered_blocks(width, height, config, seed)
     for block_index in range(char_count):
-        x, y = next(blocks)
+        x, y = blocks[block_index]
         bits = char_matrix[block_index]
         more_follows = block_index < char_count - 1
 
@@ -99,11 +122,12 @@ def embed(char_matrix, image, char_count, config=None):
     return image
 
 
-def extract(image, config=None):
+def extract(image, config=None, seed=None):
     """Read the hidden payload back.
 
     Returns (char_count, bit_list) with 8 bits per character -- same contract as
-    baseline.image_utils.decode_message.
+    baseline.image_utils.decode_message. `seed` is required only for
+    pixel_order='prng' (it must match the one used to embed).
     """
     config = config or StegoConfig()
     config.validate()
@@ -112,7 +136,7 @@ def extract(image, config=None):
     bits = []
     char_count = 0
 
-    for x, y in _iter_blocks(width, height, config):
+    for x, y in _ordered_blocks(width, height, config, seed):
         pixels = [image.getpixel((x + i, y)) for i in range(3)]
 
         for ch in range(_DATA_CHANNELS):
