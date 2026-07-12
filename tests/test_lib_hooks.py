@@ -16,12 +16,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.config import StegoConfig
 
 HOOKS = [
-    {"matching_mode": "pm_one"},
     {"termination": "length_header"},
     {"saturation_255": "fix"},
     {"bits_per_channel": 2},
 ]
-# note: pixel_order="prng" is now implemented (Improvement 1) -> no longer a hook
+# note: pixel_order="prng" (Improvement 1) and matching_mode="pm_one" (Improvement 2)
+# are now implemented -> no longer hooks. Remaining hooks are P3 + bpp.
 
 
 def test_default_config_constructs():

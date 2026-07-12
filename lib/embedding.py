@@ -14,6 +14,8 @@ are identical to the baseline.
 Channel layout of a 3-pixel block (indices 0..8):
     0,1,2 = pixel0 R,G,B    3,4,5 = pixel1 R,G,B    6,7 = pixel2 R,G    8 = pixel2 B (flag)
 """
+import hashlib
+
 import numpy as np
 
 from lib.config import StegoConfig
@@ -58,22 +60,49 @@ def _ordered_blocks(width, height, config, seed):
     raise ValueError(f"unknown pixel_order {config.pixel_order!r}")
 
 
-def _match_channel(value, bit, config):
-    """Nudge a channel so its parity equals `bit`, per matching_mode.
+def _match_plus_one(value, bit):
+    """Baseline matching: keep if parity already matches, otherwise +1 (never -1).
 
-    Default 'plus_one': keep if parity already matches, otherwise +1 (never -1).
-    Reproduces the baseline's four-branch parity rule exactly.
+    The caller skips channels at 255 (saturation_255 == "skip").
     """
     if value % 2 == bit:
         return value
     return value + 1
 
 
-def _apply_continuation_flag(blue_value, more_follows, config):
-    """Set the 9th-channel flag: odd if more characters follow, else even.
+def _match_pm_one(value, bit, direction):
+    """Edge-safe +/-1 matching (Improvement 2): no drift, no 255-skip.
 
-    Applied regardless of saturation (matching the baseline), so a blue channel
-    at 255 on the final character becomes 256 -- exactly as the baseline leaves it.
+    On a parity mismatch: 0 -> +1 and 255 -> -1 (staying in range), otherwise
+    value + `direction` (a key-seeded +/-1). Every channel is usable, so the
+    255-bug disappears.
+    """
+    if value % 2 == bit:
+        return value
+    if value == 0:
+        return 1
+    if value == 255:
+        return 254
+    return value + direction
+
+
+def _direction_stream(seed):
+    """Infinite +/-1 stream for pm_one, seeded SEPARATELY from the permutation PRNG.
+
+    Decode never uses it (parity is corrected either way); it only makes the stego
+    image reproducible for a given key.
+    """
+    rng = np.random.default_rng(int.from_bytes(hashlib.sha256(seed + b"pm1").digest(), "big"))
+    while True:
+        for d in rng.integers(0, 2, size=4096):
+            yield 1 if d else -1
+
+
+def _apply_continuation_flag(blue_value, more_follows, config):
+    """Baseline flag: odd if more characters follow, else even, via +1.
+
+    Applied regardless of saturation, so a blue channel at 255 on the final
+    character becomes 256 -- exactly as the baseline leaves it.
     """
     if more_follows:
         if blue_value % 2 == 0:
@@ -82,6 +111,23 @@ def _apply_continuation_flag(blue_value, more_follows, config):
         if blue_value % 2 == 1:
             return blue_value + 1
     return blue_value
+
+
+def _flag_pm_one(blue_value, more_follows):
+    """Edge-safe continuation flag for pm_one: same mechanism, no 255 overflow.
+
+    Forces the target parity (odd = more follows, even = terminator) using 255 -> -1
+    and 0 -> +1, so a 255 blue on the terminator does not overflow (fixes saturated
+    round-trip). The flag MECHANISM is unchanged (still a continuation flag).
+    """
+    target = 1 if more_follows else 0
+    if blue_value % 2 == target:
+        return blue_value
+    if blue_value == 255:
+        return 254
+    if blue_value == 0:
+        return 1
+    return blue_value + 1
 
 
 def embed(char_matrix, image, char_count, config=None, seed=None):
@@ -100,6 +146,9 @@ def embed(char_matrix, image, char_count, config=None, seed=None):
         return False
 
     blocks = _ordered_blocks(width, height, config, seed)
+    pm_one = config.matching_mode == "pm_one"
+    directions = _direction_stream(seed) if pm_one else None
+
     for block_index in range(char_count):
         x, y = blocks[block_index]
         bits = char_matrix[block_index]
@@ -107,14 +156,21 @@ def embed(char_matrix, image, char_count, config=None, seed=None):
 
         pixels = [list(image.getpixel((x + i, y))) for i in range(3)]
 
-        # channels 0..7 -> data bits (skip channels already at 255)
+        # channels 0..7 -> data bits
         for ch in range(_DATA_CHANNELS):
             pi, ci = divmod(ch, 3)
-            if pixels[pi][ci] < 255:                       # saturation_255 == "skip"
-                pixels[pi][ci] = _match_channel(pixels[pi][ci], bits[ch], config)
+            v = pixels[pi][ci]
+            if pm_one:
+                needs_dir = (v % 2 != bits[ch]) and (1 <= v <= 254)
+                pixels[pi][ci] = _match_pm_one(v, bits[ch], next(directions) if needs_dir else 0)
+            elif v < 255:                                  # plus_one: saturation_255 == "skip"
+                pixels[pi][ci] = _match_plus_one(v, bits[ch])
 
-        # channel 8 (pixel2 blue) -> continuation flag  (termination == "continuation_flag")
-        pixels[2][2] = _apply_continuation_flag(pixels[2][2], more_follows, config)
+        # channel 8 (pixel2 blue) -> continuation flag
+        if pm_one:
+            pixels[2][2] = _flag_pm_one(pixels[2][2], more_follows)
+        else:
+            pixels[2][2] = _apply_continuation_flag(pixels[2][2], more_follows, config)
 
         for i in range(3):
             image.putpixel((x + i, y), tuple(pixels[i]))

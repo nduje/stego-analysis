@@ -11,7 +11,8 @@ bits_per_channel : int   (default 1)
     LSB/parity payload per channel. Only 1 is implemented (the baseline rate).
 matching_mode    : str   "plus_one" (default) | "pm_one"
     How a channel is nudged to carry a bit. Baseline only ever +1 or keeps.
-    "pm_one" (LSB matching, +/-1) is a future improvement.
+    "pm_one" (Improvement 2) uses edge-safe +/-1 matching (direction key-seeded),
+    removing the upward drift AND the 255-skip -- so the 255-bug disappears too.
 pixel_order      : str   "sequential" (default) | "prng"
     Order in which 3-pixel blocks are visited. Baseline is raster/sequential.
     "prng" (Improvement 1) permutes the blocks with a key-seeded PRNG, scattering
@@ -30,7 +31,7 @@ from dataclasses import dataclass
 
 # value -> is it implemented on Day 2?  (False == inert hook)
 _SWITCHES = {
-    "matching_mode":  {"plus_one": True,          "pm_one": False},
+    "matching_mode":  {"plus_one": True,          "pm_one": True},
     "pixel_order":    {"sequential": True,        "prng": True},
     "termination":    {"continuation_flag": True, "length_header": False},
     "saturation_255": {"skip": True,              "fix": False},

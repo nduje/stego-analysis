@@ -468,6 +468,37 @@ The measurement of whether the positional cliff actually disappears (and any
 secondary effect on the ML detector) is deferred to the re-analysis phase
 (Days 14-17); Day 11 delivers the implementation, round-trip correctness, and tests.
 
+## Improvement 2: edge-safe +/-1 matching (Day 12)
+
+The baseline always nudges `+1` on a mismatch (asymmetric) -- a systematic upward
+drift that is (a) the defining property of "+1 != LSB replacement" and (b) a
+learnable trace for ML's spatial features. **Improvement 2** switches to classic
+`+/-1` matching: on a mismatch go `+1` or `-1`, so there is no drift.
+
+- **Switch:** `StegoConfig(matching_mode="pm_one")` (previously an inert hook).
+- **Direction (decision A):** `+1`/`-1` for the `1..254` case comes from a PRNG
+  seeded separately (`sha256(seed + b"pm1")`) from the permutation PRNG, consumed
+  only when a flip happens. **Decode never uses it** -- `extract` reads parity only,
+  which is corrected either way -- so the direction is neither sent nor regenerated;
+  it only makes the stego image reproducible for a given key.
+- **Edges + 255-bug (decision B):** `0 -> +1`, `255 -> -1` (staying in range),
+  `1..254 -> +/-1`. There is **no more 255-skip**, so every channel is usable and
+  the **255-bug disappears** -- round-trip now works on bright/saturated images
+  (`test_pm_one.py` verifies it on a fully saturated cover, where the baseline
+  failed). The continuation flag is made edge-safe the same way (`255 -> -1`) so the
+  terminator does not overflow; the flag MECHANISM is unchanged (Improvement 3 is
+  the one that replaces it with a length header).
+- **Imperceptibility unchanged:** still exactly `+/-1` per channel, so PSNR/MSE are
+  identical to the baseline (`test_pm_one.py` asserts `|stego - cover| <= 1`).
+
+`matching_mode="pm_one"` is an **independent** switch, so the re-analysis (Days
+14-17) can measure it in isolation (baseline + P2 only) for clean attribution and
+cumulatively (P1+P2+P3). Note that "baseline + P2" changes two things at once --
+the asymmetry (detectability) *and* round-trip success (correctness, ~75-90% ->
+~100% on real covers) -- to be reported separately. `sequential`+`plus_one` stays
+byte-for-byte identical (parity green); the frozen baseline keeps its bug as the
+valid "before".
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we
