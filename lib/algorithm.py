@@ -22,6 +22,10 @@ from lib import crypto
 from lib import embedding
 
 
+_HEADER_BITS = 16               # length header = 16-bit char count (max 65535)
+_HEADER_BLOCKS = _HEADER_BITS // 8   # 8 data bits per block -> 2 header blocks
+
+
 def load_image(path):
     """Open an image as an RGB copy (matches baseline.image_utils.load_image)."""
     return Image.open(path).copy().convert('RGB')
@@ -52,6 +56,9 @@ class StegAlgorithm:
         """
         k_enc, seed = _resolve(passphrase, key)
         bitstring = msg.text_to_bitstring(message)
+        if self.config.termination == "length_header":
+            # prepend a 16-bit char count BEFORE AES so the header is whitened too
+            bitstring = format(len(message), "016b") + bitstring
         ciphertext = crypto.encrypt_message(message=bitstring, key=k_enc)
         char_matrix, char_count = msg.split_into_chars(ciphertext)
 
@@ -66,7 +73,21 @@ class StegAlgorithm:
     def expose(self, stego_image, *, passphrase=None, key=None):
         """Recover the plaintext message from a stego image."""
         k_enc, seed = _resolve(passphrase, key)
+        if self.config.termination == "length_header":
+            return self._expose_length_header(stego_image, k_enc, seed)
         char_count, bits = embedding.extract(stego_image, self.config, seed)
         ciphertext = msg.bits_to_bitstring(bits)
         plaintext_bits = crypto.decrypt_message(ciphertext=ciphertext, key=k_enc)
         return msg.bits_to_text(char_count, plaintext_bits)
+
+    def _expose_length_header(self, stego_image, k_enc, seed):
+        """read -> decrypt -> length -> read rest -> decrypt -> message.
+
+        AES-CTR is a stream cipher, so decrypting the first 2 blocks (16 bits) of
+        ciphertext yields the 16-bit plaintext header; then read 2 + N blocks.
+        """
+        hdr = embedding.read_bits(stego_image, self.config, seed, _HEADER_BLOCKS)
+        n = int(crypto.decrypt_message(msg.bits_to_bitstring(hdr), k_enc)[:_HEADER_BITS], 2)
+        cbits = embedding.read_bits(stego_image, self.config, seed, _HEADER_BLOCKS + n)
+        plaintext = crypto.decrypt_message(msg.bits_to_bitstring(cbits), k_enc)
+        return msg.bits_to_text(n, plaintext[_HEADER_BITS:])

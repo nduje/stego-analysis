@@ -166,16 +166,35 @@ def embed(char_matrix, image, char_count, config=None, seed=None):
             elif v < 255:                                  # plus_one: saturation_255 == "skip"
                 pixels[pi][ci] = _match_plus_one(v, bits[ch])
 
-        # channel 8 (pixel2 blue) -> continuation flag
-        if pm_one:
-            pixels[2][2] = _flag_pm_one(pixels[2][2], more_follows)
-        else:
-            pixels[2][2] = _apply_continuation_flag(pixels[2][2], more_follows, config)
+        # channel 8 (pixel2 blue) -> continuation flag (termination == "continuation_flag").
+        # For "length_header" (Improvement 3) the 9th channel is left as untouched cover.
+        if config.termination == "continuation_flag":
+            if pm_one:
+                pixels[2][2] = _flag_pm_one(pixels[2][2], more_follows)
+            else:
+                pixels[2][2] = _apply_continuation_flag(pixels[2][2], more_follows, config)
 
         for i in range(3):
             image.putpixel((x + i, y), tuple(pixels[i]))
 
     return image
+
+
+def read_bits(image, config, seed, n_blocks):
+    """Read the 8 data-channel parities from the first `n_blocks` visited blocks.
+
+    Used by the length-header decoder (which learns how many blocks to read only
+    after decrypting the header); the 9th channel is never read.
+    """
+    width, height = image.size
+    blocks = _ordered_blocks(width, height, config, seed)
+    bits = []
+    for x, y in blocks[:n_blocks]:
+        pixels = [image.getpixel((x + i, y)) for i in range(3)]
+        for ch in range(_DATA_CHANNELS):
+            pi, ci = divmod(ch, 3)
+            bits.append(pixels[pi][ci] % 2)
+    return bits
 
 
 def extract(image, config=None, seed=None):

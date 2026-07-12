@@ -19,8 +19,9 @@ pixel_order      : str   "sequential" (default) | "prng"
     the payload so the sequential "cliff" (positional chi-square) disappears.
 termination      : str   "continuation_flag" (default) | "length_header"
     How the decoder knows where the payload ends. Baseline uses the 9th-channel
-    continuation flag. "length_header" is a future improvement (also fixes the
-    non-ASCII / length-correctness limitation).
+    continuation flag. "length_header" (Improvement 3) prepends a 16-bit length to
+    the plaintext BEFORE AES (so it is whitened) and stops writing the 9th channel
+    -- removing the systematic odd-blue flag trace. Assumes capacity <= 65535 chars.
 saturation_255   : str   "skip" (default) | "fix"
     What to do with a channel already at 255. Baseline skips it (payload lost).
     "fix" is a future improvement.
@@ -33,7 +34,7 @@ from dataclasses import dataclass
 _SWITCHES = {
     "matching_mode":  {"plus_one": True,          "pm_one": True},
     "pixel_order":    {"sequential": True,        "prng": True},
-    "termination":    {"continuation_flag": True, "length_header": False},
+    "termination":    {"continuation_flag": True, "length_header": True},
     "saturation_255": {"skip": True,              "fix": False},
 }
 

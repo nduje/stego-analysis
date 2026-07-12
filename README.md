@@ -499,6 +499,44 @@ the asymmetry (detectability) *and* round-trip success (correctness, ~75-90% ->
 byte-for-byte identical (parity green); the frozen baseline keeps its bug as the
 valid "before".
 
+## Improvement 3: length header (Day 13)
+
+The continuation flag (9th channel = pixel-2 blue, forced to a systematic parity)
+was the one un-whitened systematic trace -- caught by both chi-square (blue,
+AUC_B 0.03) and ML (cross-channel). **Improvement 3** removes it: the message
+length is written once, up front, through the same AES stream, so it is whitened;
+the 9th channel is then left as untouched cover. This is the main blow to
+detectability, and the **last building block** -- after it, P1+P2+P3 together are
+the "after" algorithm.
+
+- **Switch:** `StegoConfig(termination="length_header")` (previously an inert hook).
+- **Whitened header (decision C):** a **16-bit char count** is prepended to the
+  plaintext *before* AES-CTR, so header+message are one encrypted stream and the
+  header is as random as the rest (max 65535 >= capacity, decision A).
+- **Freed 9th channel (decision D):** the character is still 8 bits in the first 8
+  channels of the block (block stays the packing + P1-permutation unit, capacity
+  unchanged `(W//3)*H`), but the **9th channel is no longer written** -- so the
+  odd-blue flag trace disappears (`test_length_header.py` verifies pixel-2 blue is
+  identical to the cover).
+- **Decode (decision E):** AES-CTR is a stream cipher, so decrypting the first 2
+  blocks (16 ciphertext bits) yields the plaintext length N; then read exactly
+  `2 + N` blocks, decrypt the whole stream, drop the 16-bit header. No flag scan.
+- **Capacity:** header costs the first 2 characters; a message is rejected if
+  `2 + N > (W//3)*H`.
+
+The baseline continuation-flag path is untouched (parity green); it stays frozen as
+the "before". The full **P1+P2+P3** algorithm (`prng` + `pm_one` + `length_header`)
+round-trips on arbitrary messages and saturated covers -- this is the "after"
+algorithm the re-analysis (Days 14-17) will attack and compare against the baseline.
+
+```python
+from lib import StegAlgorithm, StegoConfig
+after = StegAlgorithm(StegoConfig(pixel_order="prng", matching_mode="pm_one",
+                                  termination="length_header"))
+after.hide("secret", "cover.png", "out.png", passphrase="pw")
+after.expose(load_image("out.png"), passphrase="pw")
+```
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we
