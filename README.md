@@ -537,6 +537,37 @@ after.hide("secret", "cover.png", "out.png", passphrase="pw")
 after.expose(load_image("out.png"), passphrase="pw")
 ```
 
+## Re-analysis: improved configurations (Day 14)
+
+With all three improvements built, the re-analysis (Days 14-17) runs the **same**
+attack spectrum on the improved algorithm for a clean before/after. Five
+configurations are compared:
+
+| config | pixel_order | matching_mode | termination |
+|--------|-------------|---------------|-------------|
+| baseline | sequential | plus_one | continuation_flag |
+| p1 | prng | plus_one | continuation_flag |
+| p2 | sequential | pm_one | continuation_flag |
+| p3 | sequential | plus_one | length_header |
+| all | prng | pm_one | length_header |
+
+**Clean comparison:** same covers, same fixed key, seed 42, same reproducible
+payloads -- only the algorithm changes. Coverage is matched (blocks touched =
+`round(rate*21760)` for every config); length_header configs carry a 2-char header,
+so their message is 2 chars shorter (AES-whitened content, identical coverage).
+
+**Round-trip gate** (`scripts/verify_roundtrip.py`) before any measurement: `all`
+(the "after" algorithm) round-trips 100% on natural covers **and** the fully
+saturated one; `p2` likewise; baseline/`p1`/`p3` keep the 255-bug on saturated
+covers (no `pm_one`) -- expected, not a regression. The length-header decoder clamps
+a garbage length so an unembeddable stego degrades to a wrong answer, not a crash.
+
+**Feature pipeline** (`scripts/make_stego_sets.py --config`,
+`scripts/reanalysis_extract.py`): per config, generate stego -> extract SCRM ->
+delete the PNGs (disk-safe, resumable), keeping only `data/alaska/features/{config}/`.
+The measurements -- imperceptibility (Day 15), chi2/RS/SPA (Day 16), ML (Day 17) --
+reuse the existing scripts, now targeting each config.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we

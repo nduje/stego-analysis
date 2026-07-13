@@ -88,6 +88,10 @@ class StegAlgorithm:
         """
         hdr = embedding.read_bits(stego_image, self.config, seed, _HEADER_BLOCKS)
         n = int(crypto.decrypt_message(msg.bits_to_bitstring(hdr), k_enc)[:_HEADER_BITS], 2)
+        # robustness: a corrupt/undecodable stego can yield a garbage length -> clamp to
+        # what the image can hold so decode degrades to a wrong answer, not a crash.
+        w, h = stego_image.size
+        n = min(n, embedding.capacity_blocks(w, h) - _HEADER_BLOCKS)
         cbits = embedding.read_bits(stego_image, self.config, seed, _HEADER_BLOCKS + n)
         plaintext = crypto.decrypt_message(msg.bits_to_bitstring(cbits), k_enc)
         return msg.bits_to_text(n, plaintext[_HEADER_BITS:])
