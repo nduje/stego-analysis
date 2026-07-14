@@ -31,7 +31,7 @@ import numpy as np
 from skimage.metrics import structural_similarity
 
 from lib.config import StegoConfig
-from lib.embedding import _iter_blocks
+from lib.embedding import _iter_blocks, _ordered_blocks
 
 BT601 = (0.299, 0.587, 0.114)
 
@@ -69,17 +69,18 @@ def ssim(cover, stego, data_range=255, win_size=7):
         cover, stego, data_range=data_range, win_size=win_size))
 
 
-def region_mask(width, height, char_count, config=None):
+def region_mask(width, height, char_count, config=None, seed=None):
     """Boolean HxW mask of pixels the algorithm touches for `char_count` chars.
 
-    Replays the algorithm's block iterator; marks the 3 pixels of each visited
-    block. Naturally excludes the never-visited x+2 >= width column.
+    Replays the algorithm's ACTUAL visiting order (`_ordered_blocks`), marking the
+    3 pixels of each visited block. For prng the touched pixels are scattered (not a
+    top band); for sequential it matches the raster region exactly (seed unused).
+    Note: the 9th channel (pixel-2 blue) is inside the mask but, under length_header,
+    it is left unchanged -- so its distortion is 0 within the region.
     """
     config = config or StegoConfig()
     mask = np.zeros((height, width), dtype=bool)
-    blocks = _iter_blocks(width, height, config)
-    for _ in range(char_count):
-        x, y = next(blocks)
+    for x, y in _ordered_blocks(width, height, config, seed)[:char_count]:
         mask[y, x:x + 3] = True
     return mask
 

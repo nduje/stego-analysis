@@ -568,6 +568,44 @@ delete the PNGs (disk-safe, resumable), keeping only `data/alaska/features/{conf
 The measurements -- imperceptibility (Day 15), chi2/RS/SPA (Day 16), ML (Day 17) --
 reuse the existing scripts, now targeting each config.
 
+## Re-analysis: imperceptibility before/after (Day 15)
+
+The first re-analysis axis: does making the algorithm harder to detect cost
+imperceptibility? Same metrics as Day 5 (PSNR/SSIM/MSE, global + region, per-channel
++ Y), measured on the 4 improved configs and compared to the frozen baseline (E1).
+Stego is regenerated on the fly (no PNGs, no SCRM); the region comes from each
+config's actual visiting order (`region_mask` with config+seed: scattered for prng).
+
+Region PSNR (the distortion-intensity metric) vs the baseline (~51.15 dB):
+
+| config | region PSNR | Δ vs baseline | SSIM @ r=1.0 | round-trip fail |
+|--------|-------------|---------------|--------------|-----------------|
+| baseline | 51.15 | -- | 0.9983 | 10.6% -> 25.6% |
+| p1 | 51.15 | ±0.00 | 0.9983 | 17.2% -> 25.2% |
+| p2 | 51.14 | -0.02 | 0.9970 | **0%** |
+| p3 | 51.67 | **+0.52** | 0.9985 | 10.6% -> 25.8% |
+| all | 51.65 | **+0.50** | 0.9974 | **0%** |
+
+Findings (small shifts, as expected -- imperceptibility was never the weak point):
+
+- **P3 / all are slightly *better*** (+0.5 dB region PSNR): `length_header` stops
+  writing the 9th channel, so each character perturbs fewer channels -- the freed
+  flag shows up directly in the region metric.
+- **P2 is negligibly worse** (-0.02 dB, SSIM -0.0013 at full rate): `255 -> 254`
+  instead of skipping means a few more changed channels -- but it *fixes the 255-bug*
+  (round-trip 0%).
+- **P1 ≈ baseline** (same number of changes, relocated). Global PSNR is unchanged for
+  every config (coverage is matched). Everything stays > 51 dB / SSIM > 0.996.
+- **Correctness side:** `p2`/`all` (with `pm_one`) round-trip 100%; baseline/`p1`/`p3`
+  keep the 255-bug. Note `p1`'s failure rate is slightly *higher* than baseline at low
+  rates -- scattering the payload makes it more likely to land on a 255 channel
+  somewhere, vs the baseline's compact top band.
+
+Net: the improvements do not harm imperceptibility (they slightly improve it) while
+`all` also fixes correctness -- so the detectability gains measured next (Days 16-17)
+come at no fidelity cost. See `results/imperceptibility_reanalysis.csv` and
+`results/figures/{psnr,ssim}_beforeafter_vs_rate.png`.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we
