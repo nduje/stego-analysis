@@ -606,6 +606,60 @@ Net: the improvements do not harm imperceptibility (they slightly improve it) wh
 come at no fidelity cost. See `results/imperceptibility_reanalysis.csv` and
 `results/figures/{psnr,ssim}_beforeafter_vs_rate.png`.
 
+## Re-analysis: classical attacks before/after (Day 16)
+
+The existing chi-square / RS / SPA (unchanged logic) run on the 4 improved configs
+via `scripts/run_attacks_reanalysis.py` (stego regenerated on the fly; same harness,
+test-250). The result is richer than the simple hypotheses -- the improvements turn
+out to be **complementary**.
+
+Chi-square, test-250, r=1.0 (P_E; lower = more detectable):
+
+| config | P_E | AUC_B (blue) | note |
+|--------|-----|--------------|------|
+| baseline | 0.092 | 0.032 | flag strongly detectable (inverted) |
+| p1 | 0.092 | 0.032 | keeps flag -> same |
+| p2 | 0.092 | 0.032 | keeps flag -> same |
+| **p3** | **0.420** | **0.577** | **flag removed -> ~chance** |
+| **all** | 0.396 | 0.587 | flag removed |
+
+RS / SPA, test-250, r=1.0 (AUC; ~0.5 = blind):
+
+| config | RS AUC | SPA AUC |
+|--------|--------|---------|
+| baseline | 0.496 | 0.485 |
+| p1 | 0.470 | 0.491 |
+| **p2** | **0.857** | **0.858** |
+| p3 | 0.473 | 0.517 |
+| all | 0.514 | 0.533 |
+
+Findings (honest -- some hypotheses confirmed, some not):
+
+- **P3 is the clean win (main single-number proof).** The blue-channel flag was the
+  dominant chi-square trace; `length_header` removes it, so `AUC_B` goes 0.032 ->
+  ~0.58 and chi-square detection power collapses (P_E 0.09 -> 0.42). The chi-square
+  *inversion* was flag-driven -- confirmed by `p1`/`p2` (which keep the flag) staying
+  at P_E 0.092.
+- **P2 alone is a trade-off, not a pure win (surprise).** `pm_one` (+/-1) is a
+  *symmetric* change -- i.e. LSB matching -- so RS and SPA, blind to the asymmetric
+  "+1", suddenly detect it (**AUC ~0.86**). P2 does NOT remove the chi-square
+  inversion (that is the flag's job, P3).
+- **P1 covers P2's weakness (the complement).** Scattering the payload dilutes the
+  RS/SPA signal that P2 introduces: in `all`, RS/SPA fall back to ~0.51-0.53 (blind).
+  The improvements interact -- P1 protects against the very attack P2 exposes.
+- **`all` (the full algorithm):** RS/SPA-blind (~0.5), flag-free (AUC_B ~0.5), and only
+  *mildly* chi-square-detectable (combined AUC ~0.63 / P_E 0.40 -- a residual from
+  pm_one's +/-1 in R/G, far weaker than the baseline's flag). A large net improvement,
+  though not perfectly invisible to chi-square.
+- **Positional "cliff" (P1): inconclusive.** The "+1" family inverts chi-square, so the
+  baseline shows no clean positional cliff to begin with (p-value ~0 throughout,
+  consistent with Day 11) -- so P1's effect on a cliff cannot be isolated with this
+  metric. P1's measurable contribution is the RS/SPA dilution above.
+
+Outputs: `results/{chisquare,rs,spa}_reanalysis.csv`,
+`results/chisquare_positional_reanalysis.csv`, and
+`results/figures/{chisquare_aucB,chisquare_auc,chisquare_positional,rs_spa}_beforeafter.png`.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we
