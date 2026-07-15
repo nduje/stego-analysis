@@ -80,7 +80,27 @@ def evaluate_group(Xcg, Xsg, n_splits):
     return np.array(aucs), np.array(pes)
 
 
-def run(octave, features_dir, out, n_splits):
+FIELDS = ["config", "rate", "group", "model", "auc_mean", "auc_std", "pe_mean", "pe_std"]
+
+
+def stego_stem(features_dir, config, rate):
+    if config == "baseline":
+        return os.path.join(features_dir, f"stego_r{rate}")
+    return os.path.join(features_dir, config, f"stego_r{rate}")
+
+
+def _baseline_rows(path):
+    """Day-10 ml_group.csv rows, tagged config=baseline (deterministic 'before')."""
+    if not path or not os.path.exists(path):
+        return []
+    with open(path, newline="") as f:
+        rows = list(csv.DictReader(f))
+    for r in rows:
+        r["config"] = "baseline"
+    return rows
+
+
+def run(octave, features_dir, out, n_splits, configs, baseline_from):
     Xc, fc = load_feature_set(os.path.join(features_dir, "covers"))
     layout = submodel_layout(octave, "data/alaska/covers/" + fc[0])
     cols, total = group_columns(layout)
@@ -88,20 +108,21 @@ def run(octave, features_dir, out, n_splits):
     print(f"SCRM layout: {len(layout)} submodels, {total} dims | "
           f"spatial {len(cols['spatial'])}, color {len(cols['color'])}", flush=True)
 
-    rows = []
-    for rate in EMBEDDING_RATES:
-        Xs, fs = load_feature_set(os.path.join(features_dir, f"stego_r{rate}"))
-        for group, idx in cols.items():
-            aucs, pes = evaluate_group(Xc[:, idx], Xs[:, idx], n_splits)
-            rows.append({"rate": rate, "group": group, "model": "ensemble",
-                         "auc_mean": round(float(aucs.mean()), 6), "auc_std": round(float(aucs.std()), 6),
-                         "pe_mean": round(float(pes.mean()), 6), "pe_std": round(float(pes.std()), 6)})
-            print(f"  rate {rate:<5} {group:<8} AUC {aucs.mean():.3f}  P_E {pes.mean():.3f}", flush=True)
+    rows = list(_baseline_rows(baseline_from)) if "baseline" in configs else []
+    for config in [c for c in configs if c != "baseline"]:
+        for rate in EMBEDDING_RATES:
+            Xs, fs = load_feature_set(stego_stem(features_dir, config, rate))
+            for group, idx in cols.items():
+                aucs, pes = evaluate_group(Xc[:, idx], Xs[:, idx], n_splits)
+                rows.append({"config": config, "rate": rate, "group": group, "model": "ensemble",
+                             "auc_mean": round(float(aucs.mean()), 6), "auc_std": round(float(aucs.std()), 6),
+                             "pe_mean": round(float(pes.mean()), 6), "pe_std": round(float(pes.std()), 6)})
+                print(f"  {config:<8} rate {rate:<5} {group:<8} "
+                      f"AUC {aucs.mean():.3f}  P_E {pes.mean():.3f}", flush=True)
 
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["rate", "group", "model",
-                                          "auc_mean", "auc_std", "pe_mean", "pe_std"])
+        w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         w.writerows(rows)
     print(f"wrote {out}")
@@ -111,10 +132,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--octave", default=os.environ.get("OCTAVE_BIN", "octave-cli"))
     ap.add_argument("--features", default="data/alaska/features")
-    ap.add_argument("--out", default="results/ml_group.csv")
+    ap.add_argument("--out", default="results/ml_group_reanalysis.csv")
     ap.add_argument("--splits", type=int, default=N_SPLITS)
+    ap.add_argument("--config", default="baseline,p1,p2,p3,all",
+                    help="comma-sep: baseline (copied from --baseline-from), p1,p2,p3,all (computed)")
+    ap.add_argument("--baseline-from", default="results/ml_group.csv",
+                    help="Day-10 group summary to copy the baseline 'before' rows from")
     args = ap.parse_args()
-    run(args.octave, args.features, args.out, args.splits)
+    run(args.octave, args.features, args.out, args.splits,
+        [c.strip() for c in args.config.split(",")], args.baseline_from)
 
 
 if __name__ == "__main__":

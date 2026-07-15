@@ -660,6 +660,77 @@ Outputs: `results/{chisquare,rs,spa}_reanalysis.csv`,
 `results/chisquare_positional_reanalysis.csv`, and
 `results/figures/{chisquare_aucB,chisquare_auc,chisquare_positional,rs_spa}_beforeafter.png`.
 
+## Re-analysis: machine learning before/after (Day 17)
+
+The learned detector -- the strongest attacker in the baseline (Day 10) -- run on
+the 4 improved configs (`scripts/run_ml_detection.py --config ...`, same protocol:
+SCRM 18157-dim features, FLD ensemble + linear-SVM control, 10 leakage-free 250/250
+splits). Features were already extracted (Day 14); baseline rows are copied from the
+Day-10 `ml_summary.csv` (deterministic, same seeds) purely as the "before" column.
+This is the last re-analysis axis, so it closes the before/after picture.
+
+Ensemble P_E (test protocol; lower = more detectable):
+
+| rate | baseline | p1 | p2 | p3 | all |
+|------|----------|------|------|------|------|
+| 0.05 | 0.431 | 0.424 | 0.415 | **0.448** | 0.400 |
+| 0.10 | 0.368 | 0.370 | 0.342 | **0.405** | 0.325 |
+| 0.25 | 0.217 | 0.259 | 0.202 | **0.306** | 0.215 |
+| 0.50 | 0.090 | 0.151 | 0.089 | **0.211** | 0.148 |
+| 1.00 | 0.020 | 0.019 | 0.013 | **0.124** | 0.086 |
+
+Group analysis (spatial 12753 vs color 5404 submodels) -- "where does the flag live?":
+
+| rate | metric | baseline | p3 | all |
+|------|--------|----------|------|------|
+| 1.00 | spatial P_E | 0.021 | **0.177** | 0.138 |
+| 1.00 | color P_E   | 0.027 | 0.121 | **0.080** |
+| 0.05 | spatial P_E | 0.437 | 0.461 | 0.423 |
+| 0.05 | color P_E   | 0.416 | 0.432 | **0.376** |
+
+StegExpose (Fusion), test-250 (AUC; ~0.5 = blind):
+
+| config | AUC r=0.5 | AUC r=1.0 | P_E r=1.0 |
+|--------|-----------|-----------|-----------|
+| baseline | 0.524 | 0.548 | 0.442 |
+| p1 | 0.623 | 0.558 | 0.426 |
+| **p2** | 0.628 | **0.717** | **0.266** |
+| p3 | 0.527 | 0.546 | 0.446 |
+| all | 0.527 | 0.548 | 0.436 |
+
+Findings (honest -- the strongest attacker is only blunted, not defeated):
+
+- **ML remains the strongest attacker; no config blinds it.** At full rate the baseline
+  was almost perfectly caught (P_E 0.020); the full algorithm `all` moves that to
+  P_E 0.086 -- a real ~4x improvement, **not** invisibility. At operational low rates
+  (<=0.1) every config already sits near P_E 0.33-0.45, hard for any detector.
+- **P3 is the single biggest ML help** (as it was for chi-square): removing the flag
+  lifts ensemble P_E on every rate, most at r=1.0 (0.020 -> 0.124, ~6x).
+- **P2 does NOT help ML -- it slightly hurts** (r=1.0: 0.013 < baseline 0.020). The
+  same symmetric +/-1 that RS/SPA caught (Day 16) is also visible to SCRM. StegExpose
+  independently confirms it (p2 AUC 0.72 at r=1.0, while baseline/p3/all stay ~0.55).
+- **`all` (0.086) is worse than p3 alone (0.124) at r=1.0.** P2's added signal partly
+  cancels P3's gain -- the two improvements pull in opposite directions in ML feature
+  space, mirroring the classical-attack trade-off.
+- **The flag was a SPATIAL artifact, not primarily a color one (refines the hypothesis).**
+  We expected P3 to drop the *color/cross-channel* group (blue-channel flag). Instead
+  P3 lifts the **spatial** group most (r=1.0: 0.021 -> 0.177 vs color 0.027 -> 0.121):
+  the flag sits on every 3rd pixel's blue channel, so it reads as a spatial periodicity
+  that SCRM's h/v co-occurrences catch. Conversely **P2 lowers the color group** (r=0.05:
+  0.416 -> 0.382), i.e. the +/-1 matching is a cross-channel trace. The two improvements
+  touch different regions of the feature space -- direct evidence for their complementarity.
+- **StegExpose mirrors the classical story:** baseline blind, p2 partly visible at high
+  rate, P1 dilutes it so `all` returns to ~chance.
+
+Bottom line of the re-analysis (imperceptibility Day 15, classical Day 16, ML Day 17):
+the improved algorithm keeps the same imperceptibility, closes the two channels the
+baseline leaked (chi-square flag via P3, and it never leaked to RS/SPA), and blunts the
+learned detector at high rate -- but ML stays the residual forensic threat. The honest
+headline is *a much harder target across the whole spectrum, not an undetectable one*.
+
+Outputs: `results/{ml,ml_group,stegexpose}_reanalysis.csv` and
+`results/figures/{ml_pe,ml_auc,ml_group,stegexpose,all_attacks_comparison}_beforeafter.png`.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we

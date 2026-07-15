@@ -18,10 +18,12 @@ Run (from the repo root):
 import argparse
 import csv
 import os
+import shutil
 import subprocess
 
 from lib.rates import EMBEDDING_RATES
 from analysis.detection import evaluate
+from scripts.make_stego_sets import generate
 
 
 def stegexpose_scores(java, jar, folder, out_csv):
@@ -41,26 +43,44 @@ def load_test(manifest):
         return {r["filename"] for r in csv.DictReader(f) if r["split"] == "test"}
 
 
-def run(java, jar, covers_dir, stego_root, manifest, out):
+FIELDS = ["config", "rate", "eval_set", "n_cover", "n_stego", "auc", "pe"]
+
+
+def _baseline_rows(path):
+    """Day-10 stegexpose_summary.csv rows, tagged config=baseline (the 'before')."""
+    if not path or not os.path.exists(path):
+        return []
+    with open(path, newline="") as f:
+        rows = list(csv.DictReader(f))
+    for r in rows:
+        r["config"] = "baseline"
+    return rows
+
+
+def run(java, jar, covers_dir, stego_root, manifest, out, configs, baseline_from):
     test = load_test(manifest)
     print("scoring covers ...", flush=True)
     cover = stegexpose_scores(java, jar, covers_dir, "results/_se_cover.csv")
+    cov_test = [cover[n] for n in cover if n in test]
 
-    rows = []
-    for rate in EMBEDDING_RATES:
-        folder = os.path.join(stego_root, f"r{rate}")
-        stego = stegexpose_scores(java, jar, folder, f"results/_se_stego_{rate}.csv")
-        c = [cover[n] for n in cover if n in test]
-        s = [stego[n] for n in stego if n in test]
-        res = evaluate(c, s)
-        rows.append({"rate": rate, "eval_set": "test250",
-                     "n_cover": res["n_cover"], "n_stego": res["n_stego"],
-                     "auc": round(res["auc"], 6), "pe": round(res["pe"], 6)})
-        print(f"  rate {rate:<5} AUC {res['auc']:.3f}  P_E {res['pe']:.3f}", flush=True)
+    rows = list(_baseline_rows(baseline_from)) if "baseline" in configs else []
+    for config in [c for c in configs if c != "baseline"]:
+        for rate in EMBEDDING_RATES:
+            folder = os.path.join(stego_root, config, f"r{rate}")
+            generate(config, covers_dir, stego_root, rate, 0)   # on-the-fly, disk-safe
+            stego = stegexpose_scores(java, jar, folder, f"results/_se_stego_{rate}.csv")
+            s = [stego[n] for n in stego if n in test]
+            res = evaluate(cov_test, s)
+            rows.append({"config": config, "rate": rate, "eval_set": "test250",
+                         "n_cover": res["n_cover"], "n_stego": res["n_stego"],
+                         "auc": round(res["auc"], 6), "pe": round(res["pe"], 6)})
+            print(f"  {config:<8} rate {rate:<5} AUC {res['auc']:.3f}  P_E {res['pe']:.3f}",
+                  flush=True)
+            shutil.rmtree(folder, ignore_errors=True)           # delete PNGs before next rate
 
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["rate", "eval_set", "n_cover", "n_stego", "auc", "pe"])
+        w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         w.writerows(rows)
     for r in EMBEDDING_RATES:
@@ -83,9 +103,14 @@ def main():
     ap.add_argument("--covers", default="data/alaska/covers")
     ap.add_argument("--stego", default="data/alaska/stego")
     ap.add_argument("--manifest", default="data/alaska/manifest.csv")
-    ap.add_argument("--out", default="results/stegexpose_summary.csv")
+    ap.add_argument("--out", default="results/stegexpose_reanalysis.csv")
+    ap.add_argument("--config", default="baseline,p1,p2,p3,all",
+                    help="comma-sep: baseline (copied from --baseline-from), p1,p2,p3,all (generated)")
+    ap.add_argument("--baseline-from", default="results/stegexpose_summary.csv",
+                    help="Day-10 summary to copy the baseline 'before' rows from")
     args = ap.parse_args()
-    run(args.java, args.jar, args.covers, args.stego, args.manifest, args.out)
+    run(args.java, args.jar, args.covers, args.stego, args.manifest, args.out,
+        [c.strip() for c in args.config.split(",")], args.baseline_from)
 
 
 if __name__ == "__main__":
