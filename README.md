@@ -843,6 +843,64 @@ Outputs: `results/{chisquare,rs,spa,ml,stegexpose,ml_group}_reference.csv`,
 `results/reference_payload_mapping.csv`, and
 `results/figures/{reference_chisquare_rs_spa,reference_ml_pe}.png`.
 
+## Filling two gaps before the matrix (Day 19b)
+
+An inserted day, before the Day-20 synthesis, so both results below enter the matrix
+as first-class rows/columns rather than forcing the matrix to be rebuilt later.
+
+### p13 = P1 + P3 (no P2)
+
+`StegoConfig(pixel_order="prng", termination="length_header")` -- every improvement
+except the +/-1 matching, keeping "+1" (and thus the 255-saturation bug, like
+baseline/p1/p3). Round-trip verified (5/5 on non-saturated covers). Measured through
+the full apparatus and appended to the `*_reanalysis.csv` (so config now ranges over
+baseline, p1, p2, p3, **p13**, all).
+
+ML ensemble P_E (higher = harder):
+
+| rate | baseline | p3 | **p13** | all |
+|------|----------|-----|---------|-----|
+| 0.25 | 0.217 | 0.306 | 0.260 | 0.215 |
+| 0.50 | 0.090 | 0.211 | 0.184 | 0.148 |
+| 1.00 | 0.020 | 0.124 | **0.125** | 0.086 |
+
+- **p13 is a near-twin of p3 across every attack.** At r=1.0: chi-square AUC 0.585 /
+  P_E 0.424 (flag-free, ~chance), RS 0.499 / SPA 0.518 (blind), StegExpose 0.550
+  (~chance), group P_E spatial 0.178 / color 0.123 -- all essentially identical to p3.
+- **p13 and p3 are the two most ML-resistant configs** (r=1.0 P_E ~0.125), clearly above
+  `all` (0.086, P2 hurts) and baseline (0.020).
+- **P1 (prng order) is detectability-neutral.** Adding it to p3 changes the marginal
+  SCRM statistics negligibly (it was designed to break *positional* structure, not the
+  marginal residual co-occurrences SCRM measures) -- and is a hair *more* detectable at
+  mid rates. So the most-resistant recipe is simply "flag-free + plus_one" (p3/p13); P1
+  contributes its positional property "for free" without changing detectability.
+
+### "+1-aware" attacks: a negative result (honest)
+
+We asked whether an adversary who knows the baseline always adds 1 can build a simple
+structural detector that fires on the directional "+1" but stays blind on symmetric
++/-1 -- which would show the baseline's classical-attack evasion is *accidental*
+(direction-specific). We built four candidate detectors (`analysis/plus_one_aware.py`:
+residual sign asymmetry, directional histogram flow, odd/even step imbalance, SPA trace
+imbalance) and validated them on synthetic stego (`scripts/plus_one_aware_probe.py`,
+`results/plus_one_aware_probe.csv`).
+
+**None isolates "+1".** The ones that respond fire on *any* embedding (histogram flow:
++1/lsbm/lsbr all ~0.60) or specifically on LSB *replacement* (odd/even step and SPA
+imbalance catch LSB-R at oriented AUC 0.95-0.98 -- a nice internal check that the probe
+works -- but miss "+1"). The directional "+1" signature, separated from the
+continuation-flag, is a very weak second-order histogram effect a cover-less statistic
+cannot robustly exploit.
+
+This reframes the Day-19b hypothesis honestly: the "+1" direction alone is **nearly as
+principally evasive as +/-1**, not accidentally so. Consistent with Days 16/19, the real
+classical-attack vulnerability of our stego was the **flag** (whose flag*pm_one
+interaction RS/SPA caught), not the matching direction. We report the negative result
+rather than forcing a weak attack into the comparison.
+
+Outputs: p13 appended to `results/{chisquare,rs,spa,ml,stegexpose,ml_group}_reanalysis.csv`
+(Day-16/17 figures regenerated to include p13); `results/plus_one_aware_probe.csv`.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we

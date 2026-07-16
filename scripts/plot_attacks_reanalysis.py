@@ -19,9 +19,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-ORDER = ["baseline", "p1", "p2", "p3", "all"]
+ORDER = ["baseline", "p1", "p2", "p3", "p13", "all"]
 COLORS = {"baseline": "black", "p1": "tab:blue", "p2": "tab:orange",
-          "p3": "tab:green", "all": "tab:red"}
+          "p3": "tab:green", "p13": "tab:brown", "all": "tab:red"}
 RES = "results"
 
 

@@ -34,6 +34,7 @@ CONFIGS = {
     "p2": StegoConfig(matching_mode="pm_one"),
     "p3": StegoConfig(termination="length_header"),
     "all": StegoConfig(pixel_order="prng", matching_mode="pm_one", termination="length_header"),
+    "p13": StegoConfig(pixel_order="prng", termination="length_header"),   # P1+P3, no P2
 }
 
 

@@ -65,9 +65,22 @@ def _baseline_rows(path):
     return rows
 
 
-def run(features_dir, out, n_splits, models, configs, baseline_from):
+def _existing(path):
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def run(features_dir, out, n_splits, models, configs, baseline_from, append=False):
     Xc, fc = load_feature_set(os.path.join(features_dir, "covers"))
-    rows = list(_baseline_rows(baseline_from)) if "baseline" in configs else []
+    if append:
+        rows = _existing(out)                       # keep existing configs, add the new ones
+        present = {r["config"] for r in rows}
+        configs = [c for c in configs if c not in present]
+        print(f"append: existing {sorted(present)}; computing {configs}", flush=True)
+    else:
+        rows = list(_baseline_rows(baseline_from)) if "baseline" in configs else []
     for config in [c for c in configs if c != "baseline"]:
         for rate in EMBEDDING_RATES:
             Xs, fs = load_feature_set(stego_stem(features_dir, config, rate))
@@ -102,11 +115,13 @@ def main():
                     help="comma-sep: baseline (copied from --baseline-from), p1,p2,p3,all (computed)")
     ap.add_argument("--baseline-from", default="results/ml_summary.csv",
                     help="Day-10 summary to copy the baseline 'before' rows from")
+    ap.add_argument("--append", action="store_true",
+                    help="add the given configs to an existing --out, keeping present ones")
     args = ap.parse_args()
     run(args.features, args.out, args.splits,
         [m.strip() for m in args.models.split(",")],
         [c.strip() for c in args.config.split(",")],
-        args.baseline_from)
+        args.baseline_from, args.append)
 
 
 if __name__ == "__main__":

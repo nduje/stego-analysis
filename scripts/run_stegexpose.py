@@ -60,14 +60,35 @@ def _baseline_rows(path):
     return rows
 
 
-def run(java, jar, covers_dir, stego_root, manifest, out, configs, baseline_from, octave=None):
+def _existing(path):
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def run(java, jar, covers_dir, stego_root, manifest, out, configs, baseline_from,
+        octave=None, append=False):
     test = load_test(manifest)
+
+    if append:
+        rows = _existing(out)
+        present = {r["config"] for r in rows}
+        configs = [c for c in configs if c not in present]
+        print(f"append: existing {sorted(present)}; computing {configs}", flush=True)
+    else:
+        rows = list(_baseline_rows(baseline_from)) if "baseline" in configs else []
+    todo = [c for c in configs if c != "baseline"]
+    if not todo:
+        _flush_stegexpose(out, rows)
+        print(f"wrote {out} (nothing new)")
+        return
+
     print("scoring covers ...", flush=True)
     cover = stegexpose_scores(java, jar, covers_dir, "results/_se_cover.csv")
     cov_test = [cover[n] for n in cover if n in test]
 
-    rows = list(_baseline_rows(baseline_from)) if "baseline" in configs else []
-    for config in [c for c in configs if c != "baseline"]:
+    for config in todo:
         for rate in EMBEDDING_RATES:
             folder = os.path.join(stego_root, config, f"r{rate}")
             if config in REFERENCE:
@@ -84,15 +105,19 @@ def run(java, jar, covers_dir, stego_root, manifest, out, configs, baseline_from
                   flush=True)
             shutil.rmtree(folder, ignore_errors=True)           # delete PNGs before next rate
 
+    _flush_stegexpose(out, rows)
+    for r in EMBEDDING_RATES:
+        _rm(f"results/_se_stego_{r}.csv")
+    _rm("results/_se_cover.csv")
+    print(f"wrote {out}")
+
+
+def _flush_stegexpose(out, rows):
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         w.writerows(rows)
-    for r in EMBEDDING_RATES:
-        _rm(f"results/_se_stego_{r}.csv")
-    _rm("results/_se_cover.csv")
-    print(f"wrote {out}")
 
 
 def _rm(p):
@@ -116,9 +141,11 @@ def main():
                     help="Day-10 summary to copy the baseline 'before' rows from")
     ap.add_argument("--octave", default=os.environ.get("OCTAVE_BIN"),
                     help="octave-cli path (required if --config includes hill)")
+    ap.add_argument("--append", action="store_true",
+                    help="add the given configs to an existing --out, keeping present ones")
     args = ap.parse_args()
     run(args.java, args.jar, args.covers, args.stego, args.manifest, args.out,
-        [c.strip() for c in args.config.split(",")], args.baseline_from, args.octave)
+        [c.strip() for c in args.config.split(",")], args.baseline_from, args.octave, args.append)
 
 
 if __name__ == "__main__":

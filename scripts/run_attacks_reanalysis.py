@@ -57,12 +57,30 @@ def _header(config):
     return 2 if CONFIGS[config].termination == "length_header" else 0
 
 
-def run(covers_dir, out_dir, limit):
+def _existing(out_dir, name):
+    path = os.path.join(out_dir, name)
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def run(covers_dir, out_dir, limit, configs=CONFIGS_TO_RUN, append=False):
     paths = sorted(glob.glob(os.path.join(covers_dir, "*.png")))
     if limit:
         paths = paths[:limit]
     names = [os.path.basename(p) for p in paths]
     split = _load_split(covers_dir)
+
+    if append:
+        chi_rows = _existing(out_dir, "chisquare_reanalysis.csv")
+        rs_rows = _existing(out_dir, "rs_reanalysis.csv")
+        spa_rows = _existing(out_dir, "spa_reanalysis.csv")
+        present = {r["config"] for r in chi_rows}
+        configs = [c for c in configs if c not in present]
+        print(f"append: existing {sorted(present)}; computing {list(configs)}", flush=True)
+    else:
+        chi_rows, rs_rows, spa_rows = [], [], []
 
     print("scoring covers (once) ...", flush=True)
     cover = _blank(paths)
@@ -72,8 +90,7 @@ def run(covers_dir, out_dir, limit):
             for c in CHAN:
                 cover[a][c].append(s[a][c])
 
-    chi_rows, rs_rows, spa_rows = [], [], []
-    for config in CONFIGS_TO_RUN:
+    for config in configs:
         alg = StegAlgorithm(CONFIGS[config])
         hdr = _header(config)
         for rate in EMBEDDING_RATES:
@@ -107,7 +124,8 @@ def run(covers_dir, out_dir, limit):
     _write(os.path.join(out_dir, "rs_reanalysis.csv"), rs_rows, est_fields)
     _write(os.path.join(out_dir, "spa_reanalysis.csv"), spa_rows, est_fields)
 
-    _positional(paths, out_dir)
+    if not append:
+        _positional(paths, out_dir)
     print("done")
 
 
@@ -170,8 +188,13 @@ def main():
     ap.add_argument("--covers", default="data/alaska/covers")
     ap.add_argument("--out", default="results")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--configs", default=",".join(CONFIGS_TO_RUN),
+                    help="comma-sep configs to run (e.g. p13)")
+    ap.add_argument("--append", action="store_true",
+                    help="add the given configs to existing *_reanalysis.csv, keeping present ones")
     args = ap.parse_args()
-    run(args.covers, args.out, args.limit)
+    run(args.covers, args.out, args.limit,
+        [c.strip() for c in args.configs.split(",")], args.append)
 
 
 if __name__ == "__main__":

@@ -42,7 +42,7 @@ def run(config, octave, workers):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", required=True, choices=["p1", "p2", "p3", "all"])
+    ap.add_argument("--config", required=True, choices=["p1", "p2", "p3", "all", "p13"])
     ap.add_argument("--octave", default=os.environ.get("OCTAVE_BIN", "octave-cli"))
     ap.add_argument("--workers", type=int, default=4)
     args = ap.parse_args()
