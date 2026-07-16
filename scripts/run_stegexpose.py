@@ -24,6 +24,9 @@ import subprocess
 from lib.rates import EMBEDDING_RATES
 from analysis.detection import evaluate
 from scripts.make_stego_sets import generate
+from scripts.make_reference_sets import generate as ref_generate
+
+REFERENCE = {"lsbr", "lsbm", "hill"}   # generated via make_reference_sets (hill needs octave)
 
 
 def stegexpose_scores(java, jar, folder, out_csv):
@@ -57,7 +60,7 @@ def _baseline_rows(path):
     return rows
 
 
-def run(java, jar, covers_dir, stego_root, manifest, out, configs, baseline_from):
+def run(java, jar, covers_dir, stego_root, manifest, out, configs, baseline_from, octave=None):
     test = load_test(manifest)
     print("scoring covers ...", flush=True)
     cover = stegexpose_scores(java, jar, covers_dir, "results/_se_cover.csv")
@@ -67,7 +70,10 @@ def run(java, jar, covers_dir, stego_root, manifest, out, configs, baseline_from
     for config in [c for c in configs if c != "baseline"]:
         for rate in EMBEDDING_RATES:
             folder = os.path.join(stego_root, config, f"r{rate}")
-            generate(config, covers_dir, stego_root, rate, 0)   # on-the-fly, disk-safe
+            if config in REFERENCE:
+                ref_generate(config, covers_dir, stego_root, rate, 0, octave)
+            else:
+                generate(config, covers_dir, stego_root, rate, 0)   # on-the-fly, disk-safe
             stego = stegexpose_scores(java, jar, folder, f"results/_se_stego_{rate}.csv")
             s = [stego[n] for n in stego if n in test]
             res = evaluate(cov_test, s)
@@ -108,9 +114,11 @@ def main():
                     help="comma-sep: baseline (copied from --baseline-from), p1,p2,p3,all (generated)")
     ap.add_argument("--baseline-from", default="results/stegexpose_summary.csv",
                     help="Day-10 summary to copy the baseline 'before' rows from")
+    ap.add_argument("--octave", default=os.environ.get("OCTAVE_BIN"),
+                    help="octave-cli path (required if --config includes hill)")
     args = ap.parse_args()
     run(args.java, args.jar, args.covers, args.stego, args.manifest, args.out,
-        [c.strip() for c in args.config.split(",")], args.baseline_from)
+        [c.strip() for c in args.config.split(",")], args.baseline_from, args.octave)
 
 
 if __name__ == "__main__":

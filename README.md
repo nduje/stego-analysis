@@ -783,6 +783,66 @@ Generation is disk-safe (generate -> extract SCRM -> delete PNGs, per rate;
 `tests/test_reference.py` (|delta| <= 1, in-range, ~half of samples change, LSB-R
 stays in-pair). Attacks are Day 19 -- today only builds and verifies the sets.
 
+## Reference results + positive control (Day 19)
+
+The full attack apparatus (chi-square / RS / SPA / ML / StegExpose) run on the three
+reference methods, same harness / rates / protocol as everything else. Two payoffs:
+a **positive control** (proof the attacks work) and a **yardstick** (where our
+algorithm sits versus classic and state-of-the-art methods).
+
+**Positive control -- PASSES on two independent tools.** LSB-R is what chi-square /
+RS / SPA / StegExpose were designed for.
+- chi-square on LSB-R (test-250): **normally oriented**, AUC climbs 0.52 -> **0.955**
+  (r=1.0). Our baseline's chi-square was *inverted* (AUC 0.03); the contrast proves the
+  attack is correct and our inversion was a real flag artifact, not a bug.
+- RS / SPA on LSB-R: phat tracks the **true** embedding rate (r=1.0: RS phat 0.882,
+  SPA 0.885 vs true 0.885; **bias <= 0.007** at r>=0.5), AUC -> 1.0.
+- StegExpose on LSB-R: AUC **0.70 -> 0.99**; blind on LSB-M / HILL (~0.51).
+
+So on the method they target, the attacks detect strongly and estimate the true rate.
+Our earlier "misses" on the baseline "+1" were genuine algorithm properties.
+
+**Yardstick -- ML ensemble P_E (test protocol; higher = harder):**
+
+| rate | LSB-R | LSB-M | HILL | ours: all | ours: baseline |
+|------|-------|-------|------|-----------|----------------|
+| 0.05 | 0.373 | 0.374 | **0.478** | 0.400 | 0.431 |
+| 0.25 | 0.188 | 0.192 | **0.402** | 0.215 | 0.217 |
+| 1.00 | 0.080 | 0.087 | **0.199** | 0.086 | 0.020 |
+
+- **HILL (adaptive, state of the art) is by far the hardest** -- ~2.3x our `all` at
+  r=1.0 (0.199 vs 0.086). It hides in texture and is blind to chi-square/RS/SPA/
+  StegExpose (all ~0.5); only ML dents it. This is the honest placement: our authored
+  algorithm does not reach adaptive SOTA.
+- **Our `all` sits about level with plain LSB-R / LSB-M for ML** (r=1.0: 0.086 vs
+  0.080 / 0.087), and is slightly *harder* than them at low rates. So the three
+  improvements bring the algorithm to roughly classic-LSB detectability against the
+  learned detector -- while (unlike LSB-R) evading the structural attacks.
+
+**A correction to Day 16 (the reference comparison earned its keep).** Day 16 reported
+that our P2 (`pm_one`) "became visible to RS/SPA" (AUC ~0.86) and read that as the
++/-1 matching. But the reference **LSB-M -- pure random +/-1 matching -- evades RS/SPA**
+(AUC 0.47 / 0.52), exactly as steganalysis theory predicts (RS/SPA target replacement).
+A controlled probe (`pm_one` WITH vs WITHOUT the flag, same covers) resolves it:
+
+| r=1.0 | RS AUC | SPA AUC |
+|-------|--------|---------|
+| pm_one + flag (= P2) | 0.857 | 0.858 |
+| pm_one, no flag | 0.469 | 0.520 |
+| LSB-M reference | 0.471 | 0.519 |
+
+So the RS/SPA signal was **not** the +/-1 matching but an **interaction of the
+continuation-flag with `pm_one`** (neither the flag alone -- baseline is blind at 0.50 --
+nor `pm_one` alone -- LSB-M is blind -- is detected; only the two together). This
+corrects two Day-16 statements: (1) it is the flag*pm_one interaction, not the matching;
+(2) `all` is RS/SPA-blind because it has **no flag** (P3/length_header), not because of
+"P1 dilution". Our matching, flag-free, is standard LSB matching (pm_one-no-flag 0.469
+~ LSB-M 0.471) and equally RS/SPA-invisible.
+
+Outputs: `results/{chisquare,rs,spa,ml,stegexpose,ml_group}_reference.csv`,
+`results/reference_payload_mapping.csv`, and
+`results/figures/{reference_chisquare_rs_spa,reference_ml_pe}.png`.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we

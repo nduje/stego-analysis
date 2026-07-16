@@ -77,6 +77,11 @@ def generate(method, covers_dir, out_root, rate, limit, octave=None):
           f"[changed/embedded ~{changed_total / max(bits_total, 1):.2f}]")
 
 
+def _n_covers(covers_dir, limit):
+    n = len(glob.glob(os.path.join(covers_dir, "*.png")))
+    return min(n, limit) if limit else n
+
+
 def _generate_hill(covers_dir, out_dir, rate, limit, octave):
     """HILL (adaptive) via the original HILL_COLOR.m simulator, one Octave call per
     rate looping over all covers. payload = bpc so the absolute bits match our
@@ -100,11 +105,19 @@ def _generate_hill(covers_dir, out_dir, rate, limit, octave):
         "  imwrite(uint8(X),dst);"
         "end;exit"
     )
-    r = subprocess.run([octave, "-q", "--no-gui", "--eval", m],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        print(r.stderr[:800])
-        raise SystemExit(f"hill r{rate}: octave failed (rc {r.returncode})")
+    last = None
+    for attempt in range(3):
+        r = subprocess.run([octave, "-q", "--no-gui", "--eval", m],
+                           capture_output=True, text=True)
+        last = r
+        # resumable: the m-code skips already-written dests, so a retry only fills gaps
+        if r.returncode == 0 and len(glob.glob(os.path.join(out_dir, "*.png"))) >= _n_covers(covers_dir, limit):
+            break
+        print(f"hill r{rate}: octave attempt {attempt + 1} incomplete "
+              f"(rc {r.returncode}); retrying", flush=True)
+    else:
+        print(last.stderr[:800] if last else "")
+        raise SystemExit(f"hill r{rate}: octave failed after retries (rc {last.returncode})")
     n = len(glob.glob(os.path.join(out_dir, "*.png")))
     print(f"hill r{rate}: {n} covers, {payload.bits_for_rate(rate)} bits/img "
           f"(bpc {p:.4f}) -> {out_dir}")
