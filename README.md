@@ -731,6 +731,58 @@ headline is *a much harder target across the whole spectrum, not an undetectable
 Outputs: `results/{ml,ml_group,stegexpose}_reanalysis.csv` and
 `results/figures/{ml_pe,ml_auc,ml_group,stegexpose,all_attacks_comparison}_beforeafter.png`.
 
+## Reference methods (Day 18)
+
+"Our algorithm has ML P_E 0.086" means nothing without a yardstick: *0.086 versus
+what, for a classic LSB method and for a modern adaptive one?* Day 18 builds three
+reference methods on the SAME 500 covers / seed 42 / same rates, to be attacked in
+Day 19 next to our algorithm.
+
+- **LSB-R** (`reference/lsb_replacement.py`, we wrote it): classic LSB replacement,
+  `v -> (v & 0xFE) | bit`, value stays in its {2k, 2k+1} pair. This is the method
+  chi-square/RS/SPA were *designed* for -- our **positive control**: if those attacks
+  light up on LSB-R (and they largely missed our "+1"), that proves the attack code is
+  correct and the earlier misses were a property of the algorithm, not a bug.
+- **LSB-M** (`reference/lsb_matching.py`, we wrote it): symmetric +/-1 on mismatch
+  (edges 0->+1, 255->-1) -- the same idea as our P2.
+- **HILL** (adaptive, spatial): content-adaptive cost + simulated optimal embedding.
+  We use the **original authors' simulator** rather than reimplementing it.
+
+**Payload alignment (fair comparison).** Our rate `r` is a fraction of *our* capacity
+(chars x 8 bits); the references are parameterized in bits/bpc. So we give every
+reference the SAME ABSOLUTE payload our algorithm embeds at rate `r`
+(`reference/payload.py`, `results/reference_payload_mapping.csv`):
+
+| rate | chars | payload bits | bpc (bits/channel-sample) |
+|------|-------|--------------|---------------------------|
+| 0.05 | 1088 | 8 704 | 0.0443 |
+| 0.10 | 2176 | 17 408 | 0.0885 |
+| 0.25 | 5440 | 43 520 | 0.2214 |
+| 0.50 | 10880 | 87 040 | 0.4427 |
+| 1.00 | 21760 | 174 080 | 0.8854 |
+
+LSB-R/LSB-M embed at random positions (seed 42); HILL takes `payload = bpc`, which
+targets the same absolute bit count over the 196 608 channel-samples. LSB-R and LSB-M
+share the *same* positions and payload bits per (image, rate), so the only difference
+between them is replacement vs matching.
+
+**HILL provenance (for the thesis references).** `HILL_COLOR.m` is fetched via
+Aletheia's canonical resource repo
+(`github.com/daniellerch/aletheia-external-resources`, `octave/code/HILL_COLOR.m`),
+the same mechanism that provided `SCRMQ1.m`. Original code (c) 2014 Shenzhen
+University, author Ming Wang; method from **B. Li, M. Wang, J. Huang, X. Li, "A New
+Cost Function for Spatial Image Steganography", IEEE ICIP 2014**. Licensed for
+educational/research/non-profit use. It is natively color (`HILL_COLOR` embeds each
+RGB channel with its own cost), so no per-channel workaround was needed. We call it
+through our own `octave-cli` (bypassing Aletheia's PATH `octave`) with a seeded RNG
+for reproducibility.
+
+Generation is disk-safe (generate -> extract SCRM -> delete PNGs, per rate;
+`scripts/make_reference_sets.py`, `scripts/reference_extract.py`); features land in
+`data/alaska/features/{lsbr,lsbm,hill}/` (git-ignored). Sanity tests in
+`tests/test_reference.py` (|delta| <= 1, in-range, ~half of samples change, LSB-R
+stays in-pair). Attacks are Day 19 -- today only builds and verifies the sets.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we
