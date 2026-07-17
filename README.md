@@ -958,6 +958,45 @@ Bottom line of the whole study: the three improvements take the authored algorit
 "structural-attack-blind, LSB-matching-grade against ML" (all: P_E 0.086) at unchanged
 imperceptibility -- a large, honestly-bounded gain that stops short of adaptive SOTA.
 
+## Final print figures (Day 21)
+
+Presentation, not analysis: the print-ready figures for the thesis, all generated from
+`results/master_matrix.csv` (no hand-typed numbers). Style is defined once in
+`scripts/style.py` (version -> colour/marker/line, fixed legend order, Croatian display
+names, one full-page preset) and the figures are built by `scripts/make_final_figures.py`.
+Output goes to `results/figures/final/`, each as a vector **SVG** (text as paths, so the
+Croatian diacritics survive anywhere) and a 1200-DPI white-background **PNG**. Croatian
+labels live in the figures; filenames, CSV columns and code stay English.
+
+The 16 core figures (title -> thesis chapter):
+
+| file | naslov | poglavlje |
+|------|--------|-----------|
+| psnr_vs_rate | PSNR (globalni) po stopi | neprimjetnost |
+| psnr_beforeafter | PSNR (regija): prije i poslije | neprimjetnost |
+| ssim_beforeafter | SSIM: prije i poslije | neprimjetnost |
+| chisquare_auc_vs_rate | χ²: AUC i inverzija na osnovnom | klasična steganaliza |
+| chisquare_positional | Pozicijski χ² profil | klasična steganaliza |
+| rs_vs_spa_estimate | RS: procijenjena stopa | klasična steganaliza |
+| ml_pe_vs_rate | ML: detektabilnost svih verzija | strojno učenje |
+| ml_group_pe | ML značajke: osnovni algoritam | strojno učenje |
+| chisquare_aucB_beforeafter | χ² u plavom kanalu (AUC_B) | poboljšanja (dokaz P3) |
+| chisquare_pe_beforeafter | χ²: prije i poslije | poboljšanja |
+| rs_pe_beforeafter | RS: prije i poslije | poboljšanja |
+| ml_pe_beforeafter | ML: prije i poslije | poboljšanja |
+| ml_group_beforeafter | ML značajke prije i poslije | poboljšanja |
+| reference_chisquare_rs_spa | Napadi na referentne metode | reference (pozitivna kontrola) |
+| all_attacks_comparison_multi | Usporedba svih metoda i napada (po stopi) | središnja slika |
+| all_attacks_comparison_single | Profil pri punoj ugradnji (r=1.0) | središnja slika |
+
+The central comparison is provided in two forms: `_multi` (five panels, P_E vs rate) and
+`_single` (one panel, the r=1.0 profile). Two figures read a source CSV the matrix does
+not carry (flagged in code): `chisquare_positional` (positional p-values) and the ML
+`*_group_*` figures (spatial/color breakdown). The ad-hoc working figures from earlier
+days remain under `results/figures/` as the day-by-day record; the outdated
+`all_attacks_comparison_beforeafter.png` (no p13 / references) is moved to
+`results/figures/_archive/`.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we
