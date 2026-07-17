@@ -901,6 +901,63 @@ rather than forcing a weak attack into the comparison.
 Outputs: p13 appended to `results/{chisquare,rs,spa,ml,stegexpose,ml_group}_reanalysis.csv`
 (Day-16/17 figures regenerated to include p13); `results/plus_one_aware_probe.csv`.
 
+## The comparison matrix (Day 20)
+
+Synthesis, not new measurement (except the imperceptibility gap-fill for p13 + the three
+references, which had none). Every number in the tables/figures is pulled from one
+source of truth, `results/master_matrix.csv` (tidy: version, family, rate, attack,
+metric, value), assembled and sanity-checked by `scripts/build_matrix.py` -- known
+values (baseline ML P_E 0.020, all 0.086, p3 0.124, p13 0.125, HILL 0.199, LSB-R chi2
+AUC 0.955) all reproduce, no duplicates, no gaps.
+
+**Main table -- profile at full load (r=1.0).** Attacks are reported as **P_E**
+(orientation-agnostic, so one comparable number per attack); "what you pay" is global
+PSNR (comparable across methods) and round-trip failure. Best-in-column in **bold**;
+`~0.5` P_E means blind.
+
+| version | | PSNR_g dB | rt-fail | chi2 | RS | SPA | StegExpose | ML |
+|---------|--|-----------|---------|------|----|----|-----------|----|
+| baseline | ours | 51.17 | 0.26 | 0.092* | 0.47 | 0.44 | 0.44 | **0.020** |
+| p1 | ours | 51.17 | 0.25 | 0.092* | 0.45 | 0.44 | 0.43 | 0.019 |
+| p2 | ours | 51.15 | **0.0** | 0.092* | 0.13 | 0.14 | 0.27 | 0.013 |
+| p3 | ours | 51.69 | 0.26 | 0.42 | 0.45 | 0.46 | 0.45 | 0.124 |
+| p13 | ours | 51.69 | 0.25 | 0.42 | 0.47 | 0.47 | 0.44 | 0.125 |
+| **all** | ours | 51.67 | **0.0** | 0.40 | 0.47 | 0.45 | 0.44 | 0.086 |
+| LSB-R | ref | 51.67 | -- | 0.11 | **0.02** | **0.00** | **0.02** | 0.080 |
+| LSB-M | ref | 51.67 | -- | 0.38 | 0.47 | 0.46 | 0.46 | 0.087 |
+| HILL | ref | **54.95** | -- | 0.47 | 0.47 | 0.46 | 0.47 | **0.199** |
+
+\* baseline/p1/p2 chi-square is *inverted* (AUC ~0.03); P_E 0.092 counts it as detected.
+
+Full matrix: `results/master_matrix.csv` (all rates x metrics); flat main table:
+`results/main_table.csv`; rate-dependence figure: `results/figures/all_attacks_comparison_full.png`
+(P_E vs rate, 5 attacks x 9 versions -- our configs solid, references dashed).
+
+**Where our `all` stands.**
+- **vs LSB-R (positive control):** ML about equal (0.086 vs 0.080), but `all` is *blind*
+  to every structural attack (chi2/RS/SPA/StegExpose ~0.4-0.5) whereas LSB-R is caught by
+  all of them (RS 0.02, SPA 0.00, StegExpose 0.02). Our algorithm decisively beats classic
+  LSB replacement on structural evasion.
+- **vs LSB-M:** essentially a tie across the board (ML 0.086 vs 0.087; both structural-blind).
+  Our fully-improved algorithm lands at **LSB-matching-grade** undetectability.
+- **vs HILL (adaptive SOTA):** HILL is out of reach -- 2.3x harder for ML (0.199 vs 0.086)
+  *and* better quality.
+
+**HILL buys security AND quality (Day-20 decision B, measured).** We expected HILL to
+match our PSNR while being safer. It is actually *better* on both: at r=1.0 HILL is
+54.95 dB vs our ~51.7 dB, because adaptive costs change far fewer pixels for the same
+payload -- HILL flips **48%** of pixels, LSB and our methods **~83%**. On the pixels it
+does change the distortion is the same +/-1 (region PSNR ~52 dB for all), so the gain is
+pure embedding *efficiency*. This bounds our contribution honestly: a non-adaptive
+parity scheme has essentially exhausted what is achievable without a cost model -- our
+`all` reaches LSB-matching security at LSB quality, and closing the gap to HILL would
+require adaptivity (a cost function + coding), which is a different design.
+
+Bottom line of the whole study: the three improvements take the authored algorithm from
+"trivially and invertibly detectable" (baseline: chi2 flag + ML P_E 0.02) to
+"structural-attack-blind, LSB-matching-grade against ML" (all: P_E 0.086) at unchanged
+imperceptibility -- a large, honestly-bounded gain that stops short of adaptive SOTA.
+
 ## Known baseline behaviors (confirmed Day 1)
 
 Recorded as a starting point for the improvement phase -- we *measure*, we

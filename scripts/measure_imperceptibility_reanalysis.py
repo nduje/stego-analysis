@@ -107,7 +107,14 @@ def _baseline(path):
     return {r["rate"]: r for r in csv.DictReader(open(path))}
 
 
-def run(covers_dir, out, baseline_csv, limit):
+def _existing(path):
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def run(covers_dir, out, baseline_csv, limit, configs, append):
     paths = sorted(glob.glob(os.path.join(covers_dir, "*.png")))
     if limit:
         paths = paths[:limit]
@@ -117,17 +124,26 @@ def run(covers_dir, out, baseline_csv, limit):
     fields = (["config", "rate", "n", "roundtrip_fail_frac"] +
               [f"{k}_mean" for k in METRIC_KEYS] + [f"{k}_std" for k in METRIC_KEYS] +
               ["psnr_global_rgb_delta", "psnr_region_rgb_delta", "ssim_global_chan_delta"])
+
+    rows = _existing(out) if append else []
+    present = {r["config"] for r in rows}
+    todo = [c for c in configs if c not in present]
+    if append:
+        print(f"append: existing {sorted(present)}; computing {todo}", flush=True)
+
+    for name in todo:
+        for rate, row in measure_config(name, paths, seed).items():
+            b = base.get(str(rate))
+            for hk in ("psnr_global_rgb", "psnr_region_rgb", "ssim_global_chan"):
+                row[f"{hk}_delta"] = (round(row[f"{hk}_mean"] - float(b[f"{hk}_mean"]), 6)
+                                      if b else "")
+            rows.append(row)
+
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
-        for name in ("p1", "p2", "p3", "all"):
-            for rate, row in measure_config(name, paths, seed).items():
-                b = base.get(str(rate))
-                for hk in ("psnr_global_rgb", "psnr_region_rgb", "ssim_global_chan"):
-                    row[f"{hk}_delta"] = (round(row[f"{hk}_mean"] - float(b[f"{hk}_mean"]), 6)
-                                          if b else "")
-                w.writerow(row)
+        w.writerows(rows)
     print(f"wrote {out}")
 
 
@@ -137,8 +153,11 @@ def main():
     ap.add_argument("--out", default="results/imperceptibility_reanalysis.csv")
     ap.add_argument("--baseline", default="results/imperceptibility_summary.csv")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--config", default="p1,p2,p3,all")
+    ap.add_argument("--append", action="store_true")
     args = ap.parse_args()
-    run(args.covers, args.out, args.baseline, args.limit)
+    run(args.covers, args.out, args.baseline, args.limit,
+        [c.strip() for c in args.config.split(",")], args.append)
 
 
 if __name__ == "__main__":
