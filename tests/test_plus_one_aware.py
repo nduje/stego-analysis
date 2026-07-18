@@ -1,6 +1,6 @@
 """Sanity for the candidate '+1-aware' detectors and the documented negative result.
 
-We do NOT assert that any candidate detects '+1' -- the Day-19b finding is that none
+We do NOT assert that any candidate detects '+1' -- the finding is that none
 does. We assert the detectors run and return a well-formed score, and we lock the two
 things that ARE true: the probe's internal validity (a replacement detector catches
 synthetic LSB-R) and the negative result (no candidate separates '+1' from LSB-M).
@@ -13,7 +13,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from analysis.plus_one_aware import CANDIDATES
-from scripts.plus_one_aware_probe import synth, auc
+from scripts.measure.plus_one_aware_probe import synth, auc
 
 
 def _cover(seed=0):

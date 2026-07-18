@@ -1,9 +1,9 @@
 """AES-CTR message encryption/decryption.
 
-BASELINE (Day 1): extracted verbatim from secret_message_exchange.py.
+BASELINE: extracted verbatim from secret_message_exchange.py.
 The only difference: added `generate_key()` as a stand-in for the
 DH-derived key, so the baseline can run without the socket exchange. The
-real crypto module (RSA/DH/AES-CTR, cleaned up) is Day 3 -- nothing touched here.
+real crypto module (RSA/DH/AES-CTR, cleaned up) lives in lib/ -- nothing touched here.
 """
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
@@ -14,7 +14,7 @@ import os
 
 def generate_key():
     """Stand-in for the DH-derived key: 32 random bytes, base64-encoded.
-    On Day 3 this is replaced by the real key from key_exchange."""
+    In the library this is replaced by the real key from key_exchange."""
     return base64.b64encode(os.urandom(32)).decode()
 
 

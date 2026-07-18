@@ -7,7 +7,7 @@ forced inward (0 -> +1, 255 -> -1) so no value leaves [0, 255]. |delta| <= 1.
 
 Because the change is symmetric, chi-square/RS/SPA (built for LSB-R) are largely
 blind to it -- which is exactly why our baseline "+1" evaded them, and why P2's
-+/-1 became visible to RS/SPA only through the residual statistics (Day 16).
++/-1 became visible to RS/SPA only through the residual statistics.
 """
 import numpy as np
 

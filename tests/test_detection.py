@@ -1,4 +1,4 @@
-"""Tests for the detection harness and the chi-square detector (Day 6).
+"""Tests for the detection harness and the chi-square detector.
 
 Run:
     python -m pytest tests/test_detection.py

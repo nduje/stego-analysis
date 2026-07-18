@@ -18,7 +18,8 @@ from lib.crypto import generate_key
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COVERS = os.path.join(ROOT, "data", "covers")
-OUT = os.path.join(ROOT, "results", "_test_lib_stego.png")
+OUT = os.path.join(ROOT, "results", "_scratch", "_test_lib_stego.png")
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
 
 
 def _roundtrip(cover_name, message):

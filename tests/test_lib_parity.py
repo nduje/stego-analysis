@@ -1,6 +1,6 @@
 """PARITY: lib (default config) must reproduce the frozen baseline byte-for-byte.
 
-This is the central proof that the Day 2 refactor changed no behavior:
+This is the central proof that the parameterization refactor changed no behavior:
   1. embedding-layer parity  -- same char matrix, no crypto, compare stego PNGs
   2. full-pipeline parity     -- same fixed key + message, compare stego PNGs
 on all three covers. If either differs by a single byte, the refactor broke.
@@ -23,7 +23,8 @@ from lib import message as msg
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COVERS = os.path.join(ROOT, "data", "covers")
-OUTDIR = os.path.join(ROOT, "results")
+OUTDIR = os.path.join(ROOT, "results", "_scratch")
+os.makedirs(OUTDIR, exist_ok=True)
 COVER_NAMES = ["cover_gradient.png", "cover_noise.png", "cover_saturated.png"]
 
 # Deterministic key so the AES-CTR ciphertext (and thus the embedding) is fixed.

@@ -30,7 +30,7 @@ prng_seed        : int | None
 """
 from dataclasses import dataclass
 
-# value -> is it implemented on Day 2?  (False == inert hook)
+# value -> is it implemented?  (False == inert hook)
 _SWITCHES = {
     "matching_mode":  {"plus_one": True,          "pm_one": True},
     "pixel_order":    {"sequential": True,        "prng": True},
@@ -63,11 +63,11 @@ class StegoConfig:
             if not options[value]:
                 raise NotImplementedError(
                     f"{field}={value!r} is a hook reserved for the improvement "
-                    f"phase and is not implemented on Day 2; the only Day 2 value "
+                    f"phase and is not implemented; the only supported value "
                     f"is the baseline default."
                 )
         if self.bits_per_channel != 1:
             raise NotImplementedError(
                 f"bits_per_channel={self.bits_per_channel} is not implemented on "
-                f"Day 2; the baseline rate is 1."
+                f"the baseline rate is 1."
             )

@@ -3,7 +3,7 @@
 A cleaned copy of `baseline/message_utils.py`; the logic (and therefore the bit
 stream) is identical, which is what keeps the default configuration byte-for-byte
 compatible with the baseline. The 8-bit/char assumption is intentionally kept --
-lifting it is a future improvement (length header), not a Day 2 change.
+lifting it is a separate improvement (length header).
 """
 
 

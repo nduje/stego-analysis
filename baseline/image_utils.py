@@ -1,6 +1,6 @@
 """Custom steganography algorithm (RGB pixel parity).
 
-BASELINE (Day 1): the encoding/decoding logic is IDENTICAL to the seminar
+BASELINE: the encoding/decoding logic is IDENTICAL to the seminar
 repo. The only change from the original: I/O paths are arguments (instead
 of hardcoded "images/original.png" / "images/copy_server.png"), so the
 algorithm can run standalone, without sockets. All known behaviors

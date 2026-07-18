@@ -4,13 +4,13 @@ The AES-CTR core (encrypt_message / decrypt_message / generate_iv and the bit
 helpers) is copied byte-for-byte from `baseline/crypto.py`, which is what keeps
 the parity guarantee intact -- it is intentionally NOT modified.
 
-Day 3 adds a real key origin: a passphrase is stretched with scrypt (fixed app
+The key origin is a passphrase, stretched with scrypt (fixed app
 salt) into a 32-byte master secret, then split with HKDF into two independent
 keys via domain separation:
     k_enc  (info="stego:aes-ctr:enc")   -> the AES-CTR key
     seed   (info="stego:embed-order")   -> reserved for pixel_order="prng" (unused today)
 
-Documented, intentionally-kept properties (NOT bugs to fix on Day 3):
+Documented, intentionally-kept properties (NOT bugs):
   * IV = SHA256(key)[:16] is deterministic  -> nonce reuse across messages with
     the same key.
   * APP_SALT is fixed  -> the same passphrase always yields the same master
@@ -28,7 +28,7 @@ import hashlib
 import base64
 import os
 
-# --- key derivation (Day 3) ---
+# --- key derivation ---
 DEFAULT_PASSPHRASE = "diplomski-stego-2026"
 APP_SALT = b"stego-analysis/v1/app-salt"     # fixed on purpose (documented above)
 _SCRYPT_N, _SCRYPT_R, _SCRYPT_P = 2 ** 14, 8, 1

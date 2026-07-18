@@ -1,6 +1,6 @@
 """Orchestration: hide_message / expose_message.
 
-BASELINE (Day 1): mirrors steganography.py from the seminar, without sockets.
+BASELINE: mirrors steganography.py from the seminar, without sockets.
 `hide_message` takes the cover path and output path as arguments (instead of
 hardcoded ones); otherwise the flow is identical.
 """

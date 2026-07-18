@@ -1,4 +1,4 @@
-"""Tests for RS (Regular/Singular) analysis (Day 7).
+"""Tests for RS (Regular/Singular) analysis.
 
 Validates the estimator on textbook LSB replacement (what RS is built for):
 clean cover -> p_hat ~ 0; fully LSB-randomized -> p_hat ~ 1. The baseline's "+1"

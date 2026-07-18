@@ -1,4 +1,4 @@
-"""Key-derivation tests (Day 3): passphrase -> scrypt -> HKDF -> (k_enc, seed).
+"""Key-derivation tests: passphrase -> scrypt -> HKDF -> (k_enc, seed).
 
 Checks determinism, that different passphrases diverge, the 32-byte lengths, and
 that domain separation actually makes k_enc and seed differ.

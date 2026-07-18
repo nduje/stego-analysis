@@ -24,7 +24,8 @@ from lib.embedding import _ordered_blocks
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COVERS = os.path.join(ROOT, "data", "covers")
-OUT = os.path.join(ROOT, "results", "_test_lh.png")
+OUT = os.path.join(ROOT, "results", "_scratch", "_test_lh.png")
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
 
 LH = StegoConfig(termination="length_header")
 AFTER = StegoConfig(pixel_order="prng", matching_mode="pm_one", termination="length_header")

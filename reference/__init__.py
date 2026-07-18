@@ -1,4 +1,4 @@
-"""Reference steganography methods for the comparison (Day 18).
+"""Reference steganography methods for the comparison.
 
 - LSB-R (lsb_replacement): classic replacement, our positive control.
 - LSB-M (lsb_matching): symmetric +/-1, same idea as our P2.

@@ -1,4 +1,4 @@
-"""Round-trip tests for the baseline algorithm (Day 1).
+"""Round-trip tests for the baseline algorithm.
 
 Run:
     python -m pytest tests/            # if pytest is installed
@@ -17,7 +17,8 @@ from baseline.image_utils import load_image
 from baseline.crypto import generate_key
 
 COVERS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "covers")
-OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results", "_test_stego.png")
+OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results", "_scratch", "_test_stego.png")
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
 
 
 def _roundtrip(cover_name, message):

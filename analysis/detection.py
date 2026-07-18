@@ -3,7 +3,7 @@
 A detector maps each image to a scalar SCORE with the convention
 **higher score = more likely stego**. This module never looks at what a score
 means -- it only compares a set of cover scores against a set of stego scores --
-so it is reused unchanged for chi-square (Day 6) and RS/SPA/ML (Days 7-10).
+so it is reused unchanged for chi-square and RS/SPA/ML.
 
 Definitions
 -----------

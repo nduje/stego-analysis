@@ -22,7 +22,8 @@ from lib.config import StegoConfig as Cfg
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COVERS = os.path.join(ROOT, "data", "covers")
-OUT = os.path.join(ROOT, "results", "_test_prng.png")
+OUT = os.path.join(ROOT, "results", "_scratch", "_test_prng.png")
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
 
 PRNG = StegoConfig(pixel_order="prng")
 

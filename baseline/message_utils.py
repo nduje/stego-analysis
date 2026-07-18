@@ -1,8 +1,8 @@
 """Message preparation for encoding / decoding.
 
-BASELINE (Day 1): copied almost verbatim from the seminar repo
+BASELINE: copied almost verbatim from the seminar repo
 (github.com/nduje/Steganography). We intentionally do NOT touch the logic --
-this is the control group. Refactoring and parameterization come on Day 2.
+this is the control group. Refactoring and parameterization live in lib/.
 """
 
 

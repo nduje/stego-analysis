@@ -5,17 +5,19 @@ __pycache__/
 venv/
 .pytest_cache/
 
-# Results/artifacts (regenerated; we don't version binary outputs)
+# Results/artifacts (regenerated; we don't version stray binary outputs)
 results/*.png
-results/_test_stego.png
-# large per-image sweep tables (regenerated); the summaries + figures ARE committed
-results/imperceptibility.csv
-results/chisquare_scores.csv
-results/chisquare_positional.csv
-results/rs_scores.csv
-results/spa_scores.csv
-results/_*.csv
-# note: results/*_summary.csv and results/figures/*.png ARE committed
+# scratch outputs from tests/demos (created on demand by the writers)
+results/_scratch/
+# large per-image sweep tables (regenerated); the committed CSVs live in results/csv/
+results/csv/imperceptibility.csv
+results/csv/chisquare_scores.csv
+results/csv/chisquare_positional.csv
+results/csv/rs_scores.csv
+results/csv/spa_scores.csv
+results/csv/_*.csv
+# note: the summary/reanalysis/reference/matrix CSVs in results/csv/ and the figures
+# in results/figures/ ARE committed
 
 # Dataset (downloaded/generated via scripts; we don't push images into the repo)
 data/bossbase/

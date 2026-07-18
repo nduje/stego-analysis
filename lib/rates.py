@@ -1,4 +1,4 @@
-"""Embedding-rate constants for the experiments (defined Day 4, used Day 5+).
+"""Embedding-rate constants for the experiments.
 
 For this algorithm the embedding rate is the payload as a fraction of capacity.
 Embedding is sequential (raster order over 3-pixel blocks), so a rate of r means

@@ -1,4 +1,4 @@
-"""Tests for ML feature loading / leakage-free dataset assembly (Day 9).
+"""Tests for ML feature loading / leakage-free dataset assembly.
 
 Uses synthetic feature files (no Octave needed) to check the assembly logic:
 dimensions, no NaN, disjoint train/test images, and cover+stego of the same

@@ -1,4 +1,4 @@
-"""Tests for the ML detectors + leakage-free split helper (Day 10).
+"""Tests for the ML detectors + leakage-free split helper.
 
 Synthetic sanity: clearly separable classes -> P_E ~ 0; identically distributed
 classes -> P_E ~ 0.5. Both the ensemble and the SVM. Plus the random paired split

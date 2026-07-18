@@ -1,4 +1,4 @@
-"""Tests for the fidelity metrics (Day 5).
+"""Tests for the fidelity metrics.
 
 Run:
     python -m pytest tests/test_metrics.py

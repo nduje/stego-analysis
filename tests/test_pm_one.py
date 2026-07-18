@@ -23,7 +23,8 @@ from lib.embedding import _match_pm_one
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COVERS = os.path.join(ROOT, "data", "covers")
-OUT = os.path.join(ROOT, "results", "_test_pm_one.png")
+OUT = os.path.join(ROOT, "results", "_scratch", "_test_pm_one.png")
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
 PM = StegoConfig(matching_mode="pm_one")
 
 

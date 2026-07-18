@@ -1,4 +1,4 @@
-"""Hook tests: non-default switches are inert on Day 2.
+"""Hook tests: non-default switches are inert.
 
 Every non-default switch value must raise NotImplementedError (it's a reserved
 hook), unknown values must raise ValueError, and the default config must

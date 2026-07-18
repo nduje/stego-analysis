@@ -1,4 +1,4 @@
-"""Tests for SPA (Sample Pair Analysis) (Day 8).
+"""Tests for SPA (Sample Pair Analysis).
 
 Validates the estimator on textbook LSB replacement (what SPA is built for):
 clean cover -> p_hat ~ 0; fully LSB-randomized -> p_hat ~ 1. The baseline's "+1"

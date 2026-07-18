@@ -11,7 +11,7 @@ the candidate statistics below isolates "+1" from symmetric embedding.** The one
 respond at all respond to *any* embedding or specifically to LSB replacement, not to the
 "+1" direction. The directional "+1" signature -- separated from the continuation-flag --
 is a very weak second-order histogram effect that a simple cover-less statistic cannot
-robustly exploit. (This is consistent with Day 16/19: the classical-attack vulnerability
+robustly exploit. (Consistent with the flag analysis: the classical-attack vulnerability
 of our stego was the FLAG, not the matching direction.)
 
 So these are kept as *documented candidate attacks with a negative outcome*, not as a
