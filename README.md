@@ -146,6 +146,20 @@ dominated by SCRM feature extraction. The committed CSVs let anyone reproduce ev
 and figure in seconds without that cost. Environment, exact pipeline, seeds, and known
 pitfalls are in **[docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md)**.
 
+## Verifying the artifact
+
+One command checks that the whole thing still holds together:
+
+```bash
+python -m scripts.report.final_check
+```
+
+It runs every test suite, the parity test on its own (the baseline must stay
+byte-identical), the table provenance check, and an end-to-end regeneration of the matrix,
+tables and figures — then confirms that regenerating changed no committed result. Green on
+all five means the numbers in the thesis rest on exactly what this code produces; the exit
+code is 0 so it can gate a release.
+
 ## Results and figures
 
 The print-ready figures and what each one shows are indexed in

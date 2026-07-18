@@ -30,12 +30,20 @@ ATTACKS = [
 
 
 def _dist_plot(cov, ste, value, title):
+    """Shared bins over the bulk of the data -- these scores cluster tightly, so fixed
+    bins across the full range would draw a single invisible spike."""
     fig, ax = plt.subplots(figsize=(6, 2.6))
-    bins = 40
+    pool = np.concatenate([a for a in (cov, ste) if a is not None and len(a)])
+    lo, hi = np.percentile(pool, [0.5, 99.5])
+    lo, hi = min(lo, value), max(hi, value)                 # keep the marker in view
+    pad = 0.05 * (hi - lo) if hi > lo else 0.01
+    lo, hi = lo - pad, hi + pad
+    bins = np.linspace(lo, hi, 41)
     if cov is not None and len(cov):
         ax.hist(cov, bins=bins, alpha=0.55, label="nositelji (500)", color="tab:blue", density=True)
     if ste is not None and len(ste):
         ax.hist(ste, bins=bins, alpha=0.55, label="stego (500)", color="tab:red", density=True)
+    ax.set_xlim(lo, hi)
     ax.axvline(value, color="black", lw=2, label="ova slika")
     ax.set_title(title, fontsize=10)
     ax.set_xlabel("ocjena")

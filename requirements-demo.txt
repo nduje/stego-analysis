@@ -1,5 +1,7 @@
 # Demo-only dependencies (kept separate so the measurement pipeline stays runnable
 # without Streamlit). Install with:  pip install -r requirements-demo.txt
 streamlit>=1.30
+# optional: only needed to regenerate docs/demo/ screenshots (headless Chrome capture)
+selenium>=4.20
 # the demo also uses the measurement stack already required by the project:
 #   numpy, scipy, scikit-image, matplotlib, Pillow, cryptography
