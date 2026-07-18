@@ -1,1051 +1,141 @@
-# Steganography algorithm detectability analysis
+# stego-analysis
 
-Companion code for the master's thesis *"Detectability analysis of a custom
-steganography algorithm in a forensic setting"*. An extension of a seminar
-project from the Computer Forensics course
-([nduje/Steganography](https://github.com/nduje/Steganography)).
+Forensic detectability analysis of an authored spatial steganography algorithm. The
+algorithm hides a message in the RGB pixel parities of a cover image; this project measures
+how detectable it is across the full spectrum of steganalysis (chi-square, RS, SPA, machine
+learning, StegExpose), builds three improvements, and re-measures — placing the result next
+to classic LSB methods and a modern adaptive one. It extends a prior seminar project
+([nduje/Steganography](https://github.com/nduje/Steganography)) and is the software artifact
+of a master's thesis.
 
-## Status
+## Key results
 
-**Day 4 -- dataset pipeline.** Real color carriers: a reproducible random subset
-(500 images, seed 42) of **ALASKA v2 TIFF 256 COLOR**, converted TIFF->PNG with
-**no resampling** (native 256x256 RGB, so no resize/crop -- preserves natural
-LSBs). On real covers the documented 255-saturation behavior is quantified:
-round-trip corruption occurs exactly on images with a 255 channel in the used
-embedding region (see `scripts/verify_dataset.py`).
+At full embedding (rate 1.0), P_E is the detection error (0.5 = a blind attacker, 0 = a
+perfect one); PSNR is over the whole image (total distortion at equal payload).
 
-**Day 3 -- real key origin.** The stego key now comes from a passphrase:
-`scrypt` (fixed app salt) stretches it into a 32-byte master secret, then `HKDF`
-splits it into `k_enc` (AES-CTR key) and `seed` (reserved for future PRNG
-embed-order) via domain separation. `hide()`/`expose()` take a dual input --
-`passphrase=` (CLI/demo) or `key=` (raw key, used by the parity tests). The
-AES-CTR core is **unchanged**, so parity stays byte-identical. The seminar's
-socket RSA/DH handshake is ported to `lib/keyexchange.py` as a **deprecated,
-in-process simulation that is called nowhere**.
+| version | PSNR (dB) | round-trip | χ² | RS | SPA | StegExpose | ML |
+|---------|-----------|-----------|----|----|-----|-----------|----|
+| **baseline** | 51.2 | 74% ok | 0.09\* | 0.47 | 0.44 | 0.44 | **0.02** |
+| **all** (baseline + P1+P2+P3) | 51.7 | 100% ok | 0.40 | 0.47 | 0.45 | 0.44 | 0.09 |
+| LSB-R (replacement) | 51.7 | n/a | 0.11 | **0.02** | **0.00** | **0.02** | 0.08 |
+| LSB-M (matching) | 51.7 | n/a | 0.38 | 0.47 | 0.46 | 0.46 | 0.09 |
+| HILL (adaptive) | **54.9** | n/a | 0.47 | 0.47 | 0.46 | 0.47 | **0.20** |
 
-**Day 2 -- parameterized library.** The baseline is refactored into a clean,
-parameterized package `lib/`. Its behavior is exposed as explicit "switches"
-(`StegoConfig`) whose **default values reproduce the baseline 1:1** -- proven
-byte-for-byte by a parity test on all three covers. No behavior was changed;
-non-default switches are inert hooks (`NotImplementedError`) reserved for the
-improvement phase. `baseline/` stays **frozen** as the control group.
+\* the baseline's chi-square is *inverted* (AUC ≈ 0.03): an attacker who knows the method
+detects it. Full table: `results/tables/`; central figures:
+`results/figures/final/{png,svg}/all_attacks_comparison_{single,multi}.*`.
 
-**Day 1 -- foundations.** Environment + the starting ("baseline") algorithm
-working end-to-end without sockets, as a reproducible control group, with logic
-intentionally identical to the seminar repo.
+**In one sentence:** the three improvements take the algorithm from *trivially and
+invertibly detectable* to *blind to every structural attack and at LSB-matching level
+against the learned detector* — a large, honestly-bounded gain that still stops short of
+the adaptive state of the art (HILL is ~2.3× harder for the ML detector *and* higher
+quality, because it changes far fewer pixels for the same payload).
 
-## Structure
+## The algorithm
+
+The cover is an RGB image. A group of **3 pixels encodes one character**: 8 data bits are
+written into the parities (odd/even) of 8 of the channels, and a 9th channel carries a
+**continuation flag** that marks where the message ends. The message is encrypted
+(AES-CTR) before embedding, so the payload is indistinguishable from random. A parity is
+set by nudging a channel value by +1 when needed ("+1" matching), skipping value 255.
+
+`lib/` is a parameterized re-implementation whose **defaults reproduce the baseline
+byte-for-byte** (guaranteed by a parity test). Three improvements are exposed as switches
+in `StegoConfig`; each changes one thing:
+
+- **P1 — `pixel_order="prng"`**: the 3-pixel blocks are visited in a key-seeded random
+  order instead of raster order, so the embedding has no positional structure.
+- **P2 — `matching_mode="pm_one"`**: parities are set by a *symmetric* ±1 (edge-safe:
+  0→+1, 255→−1) instead of the asymmetric "+1"; this also removes the 255-saturation bug,
+  so round-trip succeeds on every cover.
+- **P3 — `termination="length_header"`**: a 16-bit length is prepended to the plaintext
+  before encryption, so the message end is known without the continuation flag — the flag
+  (a fixed per-block modification of one channel) is no longer written.
+
+`all` is P1+P2+P3; `p13` is P1+P3 (no P2). AES-CTR and key derivation (scrypt + HKDF from a
+passphrase) live in `lib/crypto.py`.
+
+## Methodology
+
+- **Dataset:** a reproducible 500-image subset (seed 42) of ALASKA II, native 256×256 RGB,
+  split 250/250 train/test.
+- **Evaluation:** every attack produces a per-image score; detectability is reported as
+  **AUC** and the orientation-agnostic **P_E** (minimum decision error), so one number
+  compares across attacks. Headline numbers are on the 250-image test set.
+- **Attacks:** chi-square (Pairs-of-Values), RS and SPA (LSB estimators), a learned
+  detector (SCRM 18157-dim colour features via Octave + an FLD ensemble and a linear-SVM
+  control, over 10 leakage-free 250/250 splits), and StegExpose as a practitioner baseline.
+- **Reference methods:** LSB-R and LSB-M (written here) and HILL (adaptive, the original
+  authors' Octave simulator), all **payload-aligned** to our algorithm — every reference
+  embeds the same absolute number of bits our algorithm embeds at a given rate.
+- Embedding rates are fractions of capacity: 0.05, 0.10, 0.25, 0.50, 1.00.
+
+All measurements are collected into one source of truth,
+`results/csv/master_matrix.csv`, from which every table and figure is generated.
+
+## Repository layout
 
 ```
-baseline/     # frozen control group -- the old algorithm, decoupled from sockets
-  image_utils.py   # encoding/decoding (RGB parity, logic as in the original)
-  message_utils.py # message <-> bits
-  crypto.py        # AES-CTR (+ stand-in key until DH arrives on Day 3)
-  stego.py         # hide_message / expose_message
-lib/          # clean, parameterized library (default config == baseline)
-  config.py        # StegoConfig -- the switches (bpp, matching, order, ...)
-  message.py       # message <-> bits (clean copy, identical behavior)
-  crypto.py        # AES-CTR (unchanged) + passphrase key derivation (scrypt/HKDF)
-  embedding.py     # parameterized embed/extract core
-  algorithm.py     # StegAlgorithm: hide() / expose() (passphrase= or key=)
-  keyexchange.py   # DEPRECATED in-process RSA/DH simulation (called nowhere)
-  rates.py         # embedding-rate constants (fraction of capacity) for Day 5+
+baseline/     the original seminar algorithm, frozen as a control group (do not edit)
+lib/          the parameterized algorithm + StegoConfig switches + crypto
+reference/    LSB-R, LSB-M, and payload alignment (HILL is an external Octave simulator)
+analysis/     the attacks (chi_square, rs, spa, ml_*) + the shared detection harness
 scripts/
-  run_baseline.py      # baseline control-group demo
-  run_stego.py         # lib demo, key from --passphrase
-  download_alaska.py   # fetch a seeded ALASKA v2 TIFF-256-COLOR subset (http)
-  prepare_dataset.py   # TIFF -> lossless PNG covers + manifest (no resampling)
-  verify_dataset.py    # read-only report: round-trip + 255-saturation finding
-tests/
-  test_baseline_roundtrip.py   # baseline round-trip
-  test_lib_parity.py           # lib default == baseline, byte-for-byte
-  test_lib_roundtrip.py        # lib round-trip (raw key + passphrase, dual-input guard)
-  test_lib_hooks.py            # non-default switches raise NotImplementedError
-  test_lib_crypto_keyderiv.py  # passphrase -> (k_enc, seed) derivation
-data/covers/  # synthetic test PNGs (gradient/noise/saturated)
-data/alaska/  # ALASKA v2 covers: raw_tif/ + covers/ (git-ignored), manifest.csv (committed)
-results/      # output stego PNGs (git-ignored)
+  data/       download/prepare the dataset, generate stego and reference sets
+  extract/    SCRM feature extraction (disk-safe: generate -> extract -> delete)
+  measure/    run the attacks + imperceptibility measurements
+  report/     build the matrix, tables, and final figures (style is the single source)
+results/
+  csv/        the committed measurement CSVs + master_matrix.csv
+  tables/     thesis tables (CSV + Word-pasteable HTML)
+  figures/    final/ (print SVG+PNG), working/ (day-to-day), _archive/ (superseded)
+tests/        algorithm/analysis suites + a table-provenance check
+docs/         REPRODUCIBILITY.md, FIGURES.md
 ```
-
-## Using the library
-
-```python
-from lib import StegAlgorithm, StegoConfig
-from lib.algorithm import load_image
-
-alg = StegAlgorithm()                       # default config == frozen baseline
-
-# key from a passphrase (scrypt -> HKDF); the CLI/demo path
-alg.hide("secret", "data/covers/cover_noise.png", "results/out.png", passphrase="my pass")
-alg.expose(load_image("results/out.png"), passphrase="my pass")
-
-# or a raw 32-byte key / base64 string, used directly (reproducible experiments)
-alg.hide("secret", "data/covers/cover_noise.png", "results/out.png", key=raw_key)
-```
-
-Exactly one of `passphrase=` / `key=` must be given (else `ValueError`).
-
-`StegoConfig` switches (Day 2: only the defaults are implemented):
-
-| switch             | default (baseline)     | hook (future improvement) |
-|--------------------|------------------------|---------------------------|
-| `bits_per_channel` | `1`                    | other rates               |
-| `matching_mode`    | `"plus_one"`           | `"pm_one"` (+/-1)         |
-| `pixel_order`      | `"sequential"`         | `"prng"`                  |
-| `termination`      | `"continuation_flag"`  | `"length_header"`         |
-| `saturation_255`   | `"skip"`               | `"fix"`                   |
 
 ## Running
 
-```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-python -m scripts.run_baseline
-python -m scripts.run_stego --message "Hi" --passphrase "correct horse"
-
-# tests (standalone; or `python -m pytest tests/`)
-python tests/test_baseline_roundtrip.py
-python tests/test_lib_parity.py
-python tests/test_lib_roundtrip.py
-python tests/test_lib_hooks.py
-python tests/test_lib_crypto_keyderiv.py
-```
-
-## Cryptography (Day 3)
-
-Key origin -- **no sockets**:
-
-```
-passphrase --scrypt(APP_SALT)--> master (32B) --HKDF--> k_enc  (info "stego:aes-ctr:enc")
-                                               \-HKDF--> seed   (info "stego:embed-order")
-```
-
-- **AES-CTR is untouched** from the baseline (parity-safe); `k_enc` feeds it.
-- `seed` is derived but **unused** today (embed order stays sequential; PRNG
-  order is a future improvement).
-- `lib/keyexchange.py` faithfully ports the seminar's RSA/DH + RSA-PSS handshake
-  as an in-process simulation. It is **deprecated and imported nowhere** in the
-  live pipeline; importing it emits a `DeprecationWarning`.
-
-Intentionally-kept properties (documented, **not** fixed here):
-
-- **Deterministic IV** = `SHA256(key)[:16]` -> nonce reuse across messages under
-  the same key.
-- **Fixed scrypt salt** -> the same passphrase always yields the same master
-  secret (reproducible, no per-run randomness).
-
-## Dataset (Day 4)
-
-Real carriers are a reproducible random subset of **ALASKA v2 TIFF 256 COLOR**
-(the algorithm is RGB, so native color covers avoid the R=G=B artifact a
-grayscale->RGB set would introduce).
+Minimal demo (needs a cover image):
 
 ```bash
-# 1. download a seeded subset of 500 native-256x256 TIFFs
-python scripts/download_alaska.py          # -> data/alaska/raw_tif/  (N=500, seed 42)
-
-# 2. TIFF -> lossless PNG (NO resize/crop) + manifest with a 50/50 train/test split
-python -m scripts.prepare_dataset --src data/alaska/raw_tif --out data/alaska/covers --seed 42
-
-# 3. read-only verification report (round-trip + 255-saturation finding)
-python -m scripts.verify_dataset --covers data/alaska/covers --n 100 --seed 42
+python -m scripts.data.run_stego --cover <cover.png> --message "Hello!"
 ```
 
-Notes:
-- Images are served over `http://`; the server's **expired HTTPS certificate**
-  only affects browser viewing, not the http downloads (the script tolerates an
-  http->https redirect via `ssl.CERT_NONE`).
-- No resampling: the TIFFs are already 256x256 RGB, so PNG conversion preserves
-  the natural LSBs. Any image not exactly 256x256x3 is skipped and reported.
-- Capacity is `(256 // 3) * 256 = 21760` characters per cover.
-- Only `manifest.csv` is committed; `raw_tif/` and `covers/` are git-ignored.
-
-## Imperceptibility analysis (Day 5)
-
-Fidelity of the **baseline** across embedding rates (improvements are measured
-later, for a before/after). Methodology:
-
-- **(A) Global vs region.** Every metric is reported both over the whole image
-  (**global**) and over only the pixels the algorithm touched (**region**). At
-  low rates the global number is dominated by the untouched area, so it mostly
-  reflects *coverage*; the region number isolates *distortion intensity*. The
-  region mask is taken by replaying the algorithm's own raster block iterator for
-  the payload length (not a formula), so it matches the real path including the
-  skipped `x+2 >= width` column. SSIM (windowed) uses the region's bounding-box
-  row band -- a documented approximation. Sanity: at rate 1.0 region ~= global.
-- **(B) Channels.** MSE/PSNR: combined RGB + per-channel R,G,B + luminance Y.
-  SSIM: per-channel average + Y. `Y = 0.299R + 0.587G + 0.114B` (BT.601).
-  PSNR peak = 255; SSIM `data_range=255`, `win_size=7`.
-- **(C) Payload.** Reproducible printable-ASCII of length `L = round(rate*21760)`;
-  content is statistically irrelevant (AES whitening), only `L` matters. Fixed
-  raw key (fast, reproducible; not scrypt per image). Payload seed = `f(image, rate)`.
-- **(D) Aggregation.** mean +/- std over the 500 covers per rate, plus the
-  round-trip failure fraction per rate.
+Regenerate the matrix, tables, and figures from the committed CSVs (seconds, no heavy
+recomputation):
 
 ```bash
-python -m scripts.measure_imperceptibility --covers data/alaska/covers --workers 16
-python -m scripts.plot_imperceptibility        # -> results/figures/*.png
+python -m scripts.report.build_matrix       # results/csv/master_matrix.csv + main_table.csv
+python -m scripts.report.make_tables        # results/tables/{csv,html}/
+python -m scripts.report.make_final_figures # results/figures/final/{svg,png}/
+python -m scripts.report.verify_provenance  # every table number traces to the matrix
 ```
 
-Outputs: `results/imperceptibility.csv` (per image x rate; git-ignored),
-`results/imperceptibility_summary.csv` (per rate; committed), and four figures in
-`results/figures/` (committed).
-
-Result (baseline, n=500 covers per rate):
-
-| rate | PSNR global RGB | PSNR region RGB | SSIM global | SSIM region | round-trip fail |
-|------|-----------------|-----------------|-------------|-------------|-----------------|
-| 0.05 | 64.18 dB | 51.15 dB | 0.9999 | 0.9982 | 10.6% |
-| 0.10 | 61.17 dB | 51.15 dB | 0.9998 | 0.9982 | 12.4% |
-| 0.25 | 57.19 dB | 51.15 dB | 0.9996 | 0.9983 | 16.6% |
-| 0.50 | 54.18 dB | 51.15 dB | 0.9992 | 0.9983 | 21.0% |
-| 1.00 | 51.17 dB | 51.15 dB | 0.9983 | 0.9983 | 25.6% |
-
-The **global** metric changes with rate (it tracks *coverage*), while the
-**region** metric is essentially flat (~51.15 dB / ~0.998) -- the per-pixel
-distortion intensity is the same regardless of payload size. They converge at
-rate 1.0 (sanity check). Round-trip failures rise monotonically with rate,
-confirming the 255-saturation bug scales with coverage.
-
-## Detectability: chi-square (Day 6)
-
-First forensic detector, plus a **reusable evaluation harness**
-(`analysis/detection.py`: AUC, P_E, ROC) that every later detector (RS/SPA/ML,
-Days 7-10) reuses. Convention: a detector maps each image to a score, **higher =
-more likely stego**; the harness only compares cover-scores vs stego-scores.
-
-`analysis/chi_square.py` implements the Westfeld Pairs-of-Values attack:
-
-- **Global** -- one score per image. Per channel: PoV statistic on pairs
-  {2i, 2i+1}; score = `chi2.sf(stat, df)` (the "probability of embedding").
-  Channels combined by pooling statistics (sum of stats, sum of df), per decision D.
-- **Positional** -- the p-value along a growing raster prefix; the "cliff" where
-  the equalized region ends localizes the sequential payload.
-
-Evaluation on the canonical **test-250** (comparable with later ML) and,
-additionally, on **all 500** (robustness). P_E is orientation-agnostic (the
-statistic's true detection power, optimal threshold in either direction); AUC is
-kept orientation-sensitive so the *sign* of the effect stays visible.
+Run the tests:
 
 ```bash
-python -m scripts.run_chisquare --covers data/alaska/covers
-python -m scripts.plot_chisquare        # -> results/figures/chisquare_*.png
+for t in tests/test_*.py; do python "$t"; done
 ```
 
-Result (baseline, combined score; test-250):
-
-| rate | AUC | P_E | AUC_R | AUC_G | AUC_B |
-|------|-----|-----|-------|-------|-------|
-| 0.05 | 0.487 | 0.464 | 0.502 | 0.504 | 0.464 |
-| 0.10 | 0.456 | 0.420 | 0.507 | 0.504 | 0.392 |
-| 0.25 | 0.352 | 0.308 | 0.514 | 0.513 | 0.224 |
-| 0.50 | 0.229 | 0.162 | 0.531 | 0.519 | 0.109 |
-| 1.00 | 0.092 | 0.092 | 0.573 | 0.559 | 0.032 |
-
-Findings (reported, not "fixed"):
-
-- **The baseline's "+1" matching does not equalize PoV pairs** the way textbook
-  LSB replacement does, so classic chi-square is not merely weak -- its p-value is
-  *anti-correlated* with embedding (AUC falls below 0.5, down to 0.09 at full rate).
-  The statistic is still discriminative; its textbook orientation is inverted.
-- **Weak at low rates, strong at high** (P_E 0.46 -> 0.09): a small sequential
-  region barely shifts the whole-image histogram. The **positional** mode exposes
-  embedding even at low rates via the cliff (see `chisquare_positional_example.png`).
-- **The signal is concentrated in the blue channel** (AUC_B 0.03 vs AUC_R/G ~0.5-0.57
-  at full rate): the continuation flag rides the 9th channel (pixel-2 blue), leaving
-  a systematic per-pair artifact there. This motivates RS/SPA/ML next.
-
-## Detectability: RS analysis (Day 7)
-
-`analysis/rs_analysis.py` implements the Fridrich-Goljan-Du RS (Regular/Singular)
-method: groups of 4 pixels in a row, mask `[0,1,1,0]`, smoothness
-`f=Σ|xᵢ₊₁−xᵢ|`, flips `F1(x)=x⊕1` / `F₋₁(x)=((x+1)⊕1)−1`. It both **detects**
-(p̂ as score → harness) and **estimates the rate** (p̂ via the RS quadratic).
-Standard RS (flip = XOR 1); channels combined by mean p̂ (decision C).
-
-```bash
-python -m scripts.run_rs --covers data/alaska/covers
-python -m scripts.plot_rs        # -> results/figures/rs_*.png
-```
-
-Result (baseline, combined; test-250):
-
-| rate | AUC | P_E | mean p̂ | bias | MAE | AUC_R | AUC_G | AUC_B |
-|------|-----|-----|--------|------|-----|-------|-------|-------|
-| 0.05 | 0.492 | 0.484 | 0.079 | +0.029 | 0.109 | 0.495 | 0.509 | 0.497 |
-| 0.10 | 0.495 | 0.484 | 0.074 | −0.026 | 0.137 | 0.494 | 0.505 | 0.497 |
-| 0.25 | 0.509 | 0.472 | 0.069 | −0.181 | 0.241 | 0.511 | 0.506 | 0.493 |
-| 0.50 | 0.496 | 0.470 | 0.058 | −0.442 | 0.465 | 0.468 | 0.525 | 0.500 |
-| 1.00 | 0.496 | 0.466 | 0.032 | −0.968 | 0.968 | 0.464 | 0.496 | 0.503 |
-
-(cover mean p̂ ≈ 0.083.) Findings (reported, not "fixed"):
-
-- **Standard RS fails on "+1".** Detection AUC ≈ 0.5 (chance) at every rate and
-  every channel; unlike LSB replacement, "+1" does not create the RS
-  regular/singular imbalance. This is **weaker than chi-square** here (which at
-  least caught the blue-channel flag artifact) -- contradicting the usual "RS beats
-  chi-square at low rates" expectation *for this algorithm*.
-- **The rate estimate collapses:** p̂ stays ≈ the cover value (~0.08) regardless of
-  the true rate, so the bias grows to −0.97 at full rate. RS effectively always
-  reports "no message" (see `rs_estimated_vs_true_rate.png`).
-- The estimator is validated on textbook LSB replacement (test: p̂ → 1), so the
-  failure is genuinely "+1" evading RS, not an implementation error.
-
-Two classic, LSB-replacement-tuned attacks (chi-square, RS) thus miss (or invert)
-on the "+1" design -- direct motivation for the learned detectors on Days 9-10.
-
-## Detectability: SPA (Day 8)
-
-`analysis/spa.py` implements Dumitrescu-Wu-Wang Sample Pair Analysis over
-horizontally adjacent pairs (u,v): trace sets X, Y, W (LSB-differ, ⊂ Y), Z (equal)
-→ quadratic `0.5(W+Z)p² + (2X−P)p + (Y−X) = 0`, smaller-magnitude root → p̂.
-Standard SPA (flip = LSB); channels combined by mean p̂. Same detection +
-estimation protocol as RS, for direct comparison.
-
-```bash
-python -m scripts.run_spa --covers data/alaska/covers
-python -m scripts.plot_spa        # -> results/figures/spa_*.png + rs_vs_spa_estimate.png
-```
-
-Result (baseline, combined; test-250):
-
-| rate | AUC | P_E | mean p̂ | bias | AUC_B |
-|------|-----|-----|--------|------|-------|
-| 0.05 | 0.497 | 0.484 | 0.041 | −0.009 | 0.494 |
-| 0.25 | 0.509 | 0.472 | 0.038 | −0.212 | 0.493 |
-| 0.50 | 0.502 | 0.460 | 0.035 | −0.465 | 0.484 |
-| 1.00 | 0.485 | 0.438 | 0.031 | −0.969 | 0.481 |
-
-(cover p̂ ≈ 0.042.) Findings (confirmatory):
-
-- **SPA behaves like RS on "+1":** detection AUC ≈ 0.5 (chance) at every rate and
-  channel; the rate estimate stays ≈ the cover level regardless of the true rate
-  (bias → −0.97). SPA's finite-state model assumes a symmetric LSB flip, which
-  "+1" is not.
-- **RS and SPA agree** (`rs_vs_spa_estimate.png`): two independent rate estimators
-  both collapse to ~cover on "+1" -- an internal-consistency check that the miss
-  is a property of "+1", not of one estimator.
-
-**Summary of the classical structural attacks (Days 6-8):** all three are tuned
-to LSB replacement and none works on the "+1" design -- chi-square is inverted
-(signal only via the blue-channel flag artifact), RS and SPA are blind (chance
-detection, collapsed rate estimates). This is the empirical case for the learned
-detectors on Days 9-10.
-
-## Detectability: machine learning setup (Day 9)
-
-The classical attacks (Days 6-8) are model-based -- they assume LSB replacement
-and miss "+1". A learned detector assumes no mechanism; it learns the traces from
-data. This is the real test of the algorithm.
-
-- **Features: SCRM** (Spatial Color Rich Model, q=1; DDE `SCRMQ1`). Color, **not**
-  grayscale SRM -- the flag signal lives in the blue channel, and a grayscale
-  model would flatten color and could dilute exactly that trace.
-- **Extraction:** the DDE `SCRMQ1.m` is driven directly through Octave by
-  `scripts/extract_scrm.py` (self-contained; it does not import Aletheia's Python
-  stack, avoiding TensorFlow/pandas). Octave is installed as the portable build.
-- **Classifier + evaluation are ours** (Day 10), through the same
-  `analysis/detection.py` harness, so ML numbers land in the SAME AUC/P_E table as
-  chi-square/RS/SPA.
-- **Protocol:** one classifier per rate (5 curves), train on train-250, test on
-  test-250 (from the manifest).
-- **No leakage** (critical): a cover and its stego share the manifest split (keyed
-  by filename), so the classifier cannot learn the scene instead of the embedding
-  (`analysis/ml_features.py`, enforced in `tests/test_ml_features.py`).
-
-```bash
-# 1. stego sets (baseline, fixed key), git-ignored; one rate at a time if disk is tight
-python -m scripts.make_stego_sets --rate 1.0
-
-# 2. SCRM features via Octave (slow; single-threaded)
-python -m scripts.extract_scrm --images data/alaska/covers      --out data/alaska/features/covers   --octave <octave-cli>
-python -m scripts.extract_scrm --images data/alaska/stego/r1.0  --out data/alaska/features/stego_r1.0 --octave <octave-cli>
-```
-
-Everything heavy is git-ignored (`data/alaska/stego/`, `data/alaska/features/`,
-`*.fea`, `aletheia/`, `octave/`); only the code is versioned. Training,
-evaluation, and P_E/AUC-vs-rate curves are Day 10.
-
-## Detectability: machine learning + whole-spectrum comparison (Day 10)
-
-The learned detector closes the baseline assessment. Unlike chi2/RS/SPA it assumes
-no embedding mechanism -- it learns the traces from the SCRM features.
-
-- **Detectors** (`analysis/ml_classifier.py`): an FLD **ensemble** (sklearn
-  equivalent of Kodovsky-Fridrich: bagged LDA on random 256-feature subspaces) and
-  a linear **SVM** control (standardize + `LinearSVC`, C=0.01 for the p>>n regime).
-  No PCA. Scores go through our harness, so ML sits in the same P_E/AUC table.
-- **Protocol** (`scripts/run_ml_detection.py`): per rate, **10 random 250/250 image
-  splits** (leakage-free -- an image's cover and stego stay on the same side),
-  train both models, report mean +/- std.
-
-ML detection (test protocol, 10 splits):
-
-| rate | ensemble AUC / P_E | SVM AUC / P_E |
-|------|--------------------|---------------|
-| 0.05 | 0.578 / 0.431 | 0.619 / 0.397 |
-| 0.10 | 0.668 / 0.368 | 0.746 / 0.303 |
-| 0.25 | 0.855 / 0.217 | 0.923 / 0.132 |
-| 0.50 | 0.964 / 0.090 | 0.979 / 0.051 |
-| 1.00 | 0.997 / 0.020 | 0.996 / 0.012 |
-
-Ensemble and SVM agree (robust); detection climbs from near-chance at the smallest
-payload to near-perfect at full rate.
-
-**Where is the signal?** (`scripts/run_ml_groups.py`) Decision 4 asked for an R/G/B
-split, but **SCRM has no clean per-channel decomposition** -- its 69 submodels are
-either spatial (12753 dims) or 3D cross-channel "color" cooccurrences (5404 dims,
-submodel type ending in `c`). So we compare spatial vs color feature groups
-instead (documented deviation). Finding: at low rates the **color/cross-channel
-features carry slightly more signal** than the spatial ones (r=0.05 AUC 0.595 vs
-0.567), despite being fewer -- consistent with the flag perturbing the blue channel
-and creating cross-channel structure (not a direct R/G/B proof).
-
-**StegExpose** (`scripts/run_stegexpose.py`), an illustrative practitioner baseline
-(threshold-dependent, prone to false alarms; fuses Primary Sets / Chi-Square /
-Sample Pairs / RS): near-chance at every rate (AUC 0.51-0.55, P_E 0.44-0.46) -- it
-misses "+1" like RS/SPA, as expected.
-
-### Whole-spectrum comparison (P_E vs rate, test-250; lower = better)
-
-| rate | chi2 | RS | SPA | **ML (ens)** | StegExpose |
-|------|------|-----|-----|----------|------------|
-| 0.05 | 0.464 | 0.484 | 0.484 | **0.431** | 0.458 |
-| 0.10 | 0.420 | 0.484 | 0.478 | **0.368** | 0.466 |
-| 0.25 | 0.308 | 0.472 | 0.472 | **0.217** | 0.460 |
-| 0.50 | 0.162 | 0.470 | 0.460 | **0.090** | 0.456 |
-| 1.00 | 0.092 | 0.466 | 0.438 | **0.020** | 0.442 |
-
-The learned detector is strongest at **every** rate and the only method that
-detects meaningfully at low payloads; chi-square is second (via the blue-channel
-flag artifact); RS, SPA and StegExpose sit near chance. This full spectrum --
-hand-crafted -> learned -> off-the-shelf tool -- is the firm "before" baseline for
-the before/after comparison against Improvements 1-3 (Days 11-13). See
-`results/figures/all_attacks_comparison.png`.
-
-```bash
-python -m scripts.run_ml_detection          # ensemble + SVM -> ml_summary.csv
-python -m scripts.run_ml_groups --octave <octave-cli>   # spatial vs color -> ml_group.csv
-python -m scripts.run_stegexpose --java <java> --jar StegExpose.jar
-python -m scripts.plot_ml                    # all figures incl. all_attacks_comparison.png
-```
-
-## Improvement 1: PRNG block order (Day 11)
-
-The baseline embeds sequentially (raster), creating one contiguous payload region
-with a sharp boundary -- the "cliff" that positional analysis can localize.
-**Improvement 1** permutes the 3-pixel blocks with a **key-seeded PRNG**, scattering
-the payload so no such region/boundary exists.
-
-- **Switch:** `StegoConfig(pixel_order="prng")` (previously an inert hook).
-- **Granularity:** whole **blocks** (3-pixel cells, one per character) are permuted,
-  preserving the "3 pixels = 1 character" structure (decision A).
-- **Isolation (decision B):** *only* the order changes. The "+1" matching, the
-  continuation flag, and the 255-skip are untouched, so any measured effect is
-  attributable purely to ordering. The decoder regenerates the **same** permutation
-  and walks it, reading the continuation flag until the terminator -- so P1 is
-  independent of the length-header work (Improvement 3).
-- **Seed (decisions C/D):** `numpy` `default_rng` (PCG64, version-stable) seeded by
-  the full 32-byte `seed` as a big int. The seed comes from `crypto.derive_keys`
-  (passphrase/HKDF) or `crypto.seed_from_key` = `sha256(raw key)` -- so the same key
-  always yields the same permutation, on both key paths.
-
-`baseline/` stays frozen and `pixel_order="sequential"` is **byte-for-byte
-unchanged** (the parity test still passes) -- it is the exact "before" control. For
-PRNG, parity with the baseline is *intentionally* lost (that is the behavior change),
-so `tests/test_prng_order.py` checks prng's own round-trip, determinism,
-seed-sensitivity, and that it truly differs from sequential.
-
-```python
-from lib import StegAlgorithm, StegoConfig
-alg = StegAlgorithm(StegoConfig(pixel_order="prng"))
-alg.hide("secret", "cover.png", "out.png", passphrase="pw")   # scattered embedding
-alg.expose(load_image("out.png"), passphrase="pw")            # same permutation regenerated
-```
-
-The measurement of whether the positional cliff actually disappears (and any
-secondary effect on the ML detector) is deferred to the re-analysis phase
-(Days 14-17); Day 11 delivers the implementation, round-trip correctness, and tests.
-
-## Improvement 2: edge-safe +/-1 matching (Day 12)
-
-The baseline always nudges `+1` on a mismatch (asymmetric) -- a systematic upward
-drift that is (a) the defining property of "+1 != LSB replacement" and (b) a
-learnable trace for ML's spatial features. **Improvement 2** switches to classic
-`+/-1` matching: on a mismatch go `+1` or `-1`, so there is no drift.
-
-- **Switch:** `StegoConfig(matching_mode="pm_one")` (previously an inert hook).
-- **Direction (decision A):** `+1`/`-1` for the `1..254` case comes from a PRNG
-  seeded separately (`sha256(seed + b"pm1")`) from the permutation PRNG, consumed
-  only when a flip happens. **Decode never uses it** -- `extract` reads parity only,
-  which is corrected either way -- so the direction is neither sent nor regenerated;
-  it only makes the stego image reproducible for a given key.
-- **Edges + 255-bug (decision B):** `0 -> +1`, `255 -> -1` (staying in range),
-  `1..254 -> +/-1`. There is **no more 255-skip**, so every channel is usable and
-  the **255-bug disappears** -- round-trip now works on bright/saturated images
-  (`test_pm_one.py` verifies it on a fully saturated cover, where the baseline
-  failed). The continuation flag is made edge-safe the same way (`255 -> -1`) so the
-  terminator does not overflow; the flag MECHANISM is unchanged (Improvement 3 is
-  the one that replaces it with a length header).
-- **Imperceptibility unchanged:** still exactly `+/-1` per channel, so PSNR/MSE are
-  identical to the baseline (`test_pm_one.py` asserts `|stego - cover| <= 1`).
-
-`matching_mode="pm_one"` is an **independent** switch, so the re-analysis (Days
-14-17) can measure it in isolation (baseline + P2 only) for clean attribution and
-cumulatively (P1+P2+P3). Note that "baseline + P2" changes two things at once --
-the asymmetry (detectability) *and* round-trip success (correctness, ~75-90% ->
-~100% on real covers) -- to be reported separately. `sequential`+`plus_one` stays
-byte-for-byte identical (parity green); the frozen baseline keeps its bug as the
-valid "before".
-
-## Improvement 3: length header (Day 13)
-
-The continuation flag (9th channel = pixel-2 blue, forced to a systematic parity)
-was the one un-whitened systematic trace -- caught by both chi-square (blue,
-AUC_B 0.03) and ML (cross-channel). **Improvement 3** removes it: the message
-length is written once, up front, through the same AES stream, so it is whitened;
-the 9th channel is then left as untouched cover. This is the main blow to
-detectability, and the **last building block** -- after it, P1+P2+P3 together are
-the "after" algorithm.
-
-- **Switch:** `StegoConfig(termination="length_header")` (previously an inert hook).
-- **Whitened header (decision C):** a **16-bit char count** is prepended to the
-  plaintext *before* AES-CTR, so header+message are one encrypted stream and the
-  header is as random as the rest (max 65535 >= capacity, decision A).
-- **Freed 9th channel (decision D):** the character is still 8 bits in the first 8
-  channels of the block (block stays the packing + P1-permutation unit, capacity
-  unchanged `(W//3)*H`), but the **9th channel is no longer written** -- so the
-  odd-blue flag trace disappears (`test_length_header.py` verifies pixel-2 blue is
-  identical to the cover).
-- **Decode (decision E):** AES-CTR is a stream cipher, so decrypting the first 2
-  blocks (16 ciphertext bits) yields the plaintext length N; then read exactly
-  `2 + N` blocks, decrypt the whole stream, drop the 16-bit header. No flag scan.
-- **Capacity:** header costs the first 2 characters; a message is rejected if
-  `2 + N > (W//3)*H`.
-
-The baseline continuation-flag path is untouched (parity green); it stays frozen as
-the "before". The full **P1+P2+P3** algorithm (`prng` + `pm_one` + `length_header`)
-round-trips on arbitrary messages and saturated covers -- this is the "after"
-algorithm the re-analysis (Days 14-17) will attack and compare against the baseline.
-
-```python
-from lib import StegAlgorithm, StegoConfig
-after = StegAlgorithm(StegoConfig(pixel_order="prng", matching_mode="pm_one",
-                                  termination="length_header"))
-after.hide("secret", "cover.png", "out.png", passphrase="pw")
-after.expose(load_image("out.png"), passphrase="pw")
-```
-
-## Re-analysis: improved configurations (Day 14)
-
-With all three improvements built, the re-analysis (Days 14-17) runs the **same**
-attack spectrum on the improved algorithm for a clean before/after. Five
-configurations are compared:
-
-| config | pixel_order | matching_mode | termination |
-|--------|-------------|---------------|-------------|
-| baseline | sequential | plus_one | continuation_flag |
-| p1 | prng | plus_one | continuation_flag |
-| p2 | sequential | pm_one | continuation_flag |
-| p3 | sequential | plus_one | length_header |
-| all | prng | pm_one | length_header |
-
-**Clean comparison:** same covers, same fixed key, seed 42, same reproducible
-payloads -- only the algorithm changes. Coverage is matched (blocks touched =
-`round(rate*21760)` for every config); length_header configs carry a 2-char header,
-so their message is 2 chars shorter (AES-whitened content, identical coverage).
-
-**Round-trip gate** (`scripts/verify_roundtrip.py`) before any measurement: `all`
-(the "after" algorithm) round-trips 100% on natural covers **and** the fully
-saturated one; `p2` likewise; baseline/`p1`/`p3` keep the 255-bug on saturated
-covers (no `pm_one`) -- expected, not a regression. The length-header decoder clamps
-a garbage length so an unembeddable stego degrades to a wrong answer, not a crash.
-
-**Feature pipeline** (`scripts/make_stego_sets.py --config`,
-`scripts/reanalysis_extract.py`): per config, generate stego -> extract SCRM ->
-delete the PNGs (disk-safe, resumable), keeping only `data/alaska/features/{config}/`.
-The measurements -- imperceptibility (Day 15), chi2/RS/SPA (Day 16), ML (Day 17) --
-reuse the existing scripts, now targeting each config.
-
-## Re-analysis: imperceptibility before/after (Day 15)
-
-The first re-analysis axis: does making the algorithm harder to detect cost
-imperceptibility? Same metrics as Day 5 (PSNR/SSIM/MSE, global + region, per-channel
-+ Y), measured on the 4 improved configs and compared to the frozen baseline (E1).
-Stego is regenerated on the fly (no PNGs, no SCRM); the region comes from each
-config's actual visiting order (`region_mask` with config+seed: scattered for prng).
-
-Region PSNR (the distortion-intensity metric) vs the baseline (~51.15 dB):
-
-| config | region PSNR | Δ vs baseline | SSIM @ r=1.0 | round-trip fail |
-|--------|-------------|---------------|--------------|-----------------|
-| baseline | 51.15 | -- | 0.9983 | 10.6% -> 25.6% |
-| p1 | 51.15 | ±0.00 | 0.9983 | 17.2% -> 25.2% |
-| p2 | 51.14 | -0.02 | 0.9970 | **0%** |
-| p3 | 51.67 | **+0.52** | 0.9985 | 10.6% -> 25.8% |
-| all | 51.65 | **+0.50** | 0.9974 | **0%** |
-
-Findings (small shifts, as expected -- imperceptibility was never the weak point):
-
-- **P3 / all are slightly *better*** (+0.5 dB region PSNR): `length_header` stops
-  writing the 9th channel, so each character perturbs fewer channels -- the freed
-  flag shows up directly in the region metric.
-- **P2 is negligibly worse** (-0.02 dB, SSIM -0.0013 at full rate): `255 -> 254`
-  instead of skipping means a few more changed channels -- but it *fixes the 255-bug*
-  (round-trip 0%).
-- **P1 ≈ baseline** (same number of changes, relocated). Global PSNR is unchanged for
-  every config (coverage is matched). Everything stays > 51 dB / SSIM > 0.996.
-- **Correctness side:** `p2`/`all` (with `pm_one`) round-trip 100%; baseline/`p1`/`p3`
-  keep the 255-bug. Note `p1`'s failure rate is slightly *higher* than baseline at low
-  rates -- scattering the payload makes it more likely to land on a 255 channel
-  somewhere, vs the baseline's compact top band.
-
-Net: the improvements do not harm imperceptibility (they slightly improve it) while
-`all` also fixes correctness -- so the detectability gains measured next (Days 16-17)
-come at no fidelity cost. See `results/imperceptibility_reanalysis.csv` and
-`results/figures/{psnr,ssim}_beforeafter_vs_rate.png`.
-
-## Re-analysis: classical attacks before/after (Day 16)
-
-The existing chi-square / RS / SPA (unchanged logic) run on the 4 improved configs
-via `scripts/run_attacks_reanalysis.py` (stego regenerated on the fly; same harness,
-test-250). The result is richer than the simple hypotheses -- the improvements turn
-out to be **complementary**.
-
-Chi-square, test-250, r=1.0 (P_E; lower = more detectable):
-
-| config | P_E | AUC_B (blue) | note |
-|--------|-----|--------------|------|
-| baseline | 0.092 | 0.032 | flag strongly detectable (inverted) |
-| p1 | 0.092 | 0.032 | keeps flag -> same |
-| p2 | 0.092 | 0.032 | keeps flag -> same |
-| **p3** | **0.420** | **0.577** | **flag removed -> ~chance** |
-| **all** | 0.396 | 0.587 | flag removed |
-
-RS / SPA, test-250, r=1.0 (AUC; ~0.5 = blind):
-
-| config | RS AUC | SPA AUC |
-|--------|--------|---------|
-| baseline | 0.496 | 0.485 |
-| p1 | 0.470 | 0.491 |
-| **p2** | **0.857** | **0.858** |
-| p3 | 0.473 | 0.517 |
-| all | 0.514 | 0.533 |
-
-Findings (honest -- some hypotheses confirmed, some not):
-
-- **P3 is the clean win (main single-number proof).** The blue-channel flag was the
-  dominant chi-square trace; `length_header` removes it, so `AUC_B` goes 0.032 ->
-  ~0.58 and chi-square detection power collapses (P_E 0.09 -> 0.42). The chi-square
-  *inversion* was flag-driven -- confirmed by `p1`/`p2` (which keep the flag) staying
-  at P_E 0.092.
-- **P2 alone is a trade-off, not a pure win (surprise).** `pm_one` (+/-1) is a
-  *symmetric* change -- i.e. LSB matching -- so RS and SPA, blind to the asymmetric
-  "+1", suddenly detect it (**AUC ~0.86**). P2 does NOT remove the chi-square
-  inversion (that is the flag's job, P3).
-- **P1 covers P2's weakness (the complement).** Scattering the payload dilutes the
-  RS/SPA signal that P2 introduces: in `all`, RS/SPA fall back to ~0.51-0.53 (blind).
-  The improvements interact -- P1 protects against the very attack P2 exposes.
-- **`all` (the full algorithm):** RS/SPA-blind (~0.5), flag-free (AUC_B ~0.5), and only
-  *mildly* chi-square-detectable (combined AUC ~0.63 / P_E 0.40 -- a residual from
-  pm_one's +/-1 in R/G, far weaker than the baseline's flag). A large net improvement,
-  though not perfectly invisible to chi-square.
-- **Positional "cliff" (P1): inconclusive.** The "+1" family inverts chi-square, so the
-  baseline shows no clean positional cliff to begin with (p-value ~0 throughout,
-  consistent with Day 11) -- so P1's effect on a cliff cannot be isolated with this
-  metric. P1's measurable contribution is the RS/SPA dilution above.
-
-Outputs: `results/{chisquare,rs,spa}_reanalysis.csv`,
-`results/chisquare_positional_reanalysis.csv`, and
-`results/figures/{chisquare_aucB,chisquare_auc,chisquare_positional,rs_spa}_beforeafter.png`.
-
-## Re-analysis: machine learning before/after (Day 17)
-
-The learned detector -- the strongest attacker in the baseline (Day 10) -- run on
-the 4 improved configs (`scripts/run_ml_detection.py --config ...`, same protocol:
-SCRM 18157-dim features, FLD ensemble + linear-SVM control, 10 leakage-free 250/250
-splits). Features were already extracted (Day 14); baseline rows are copied from the
-Day-10 `ml_summary.csv` (deterministic, same seeds) purely as the "before" column.
-This is the last re-analysis axis, so it closes the before/after picture.
-
-Ensemble P_E (test protocol; lower = more detectable):
-
-| rate | baseline | p1 | p2 | p3 | all |
-|------|----------|------|------|------|------|
-| 0.05 | 0.431 | 0.424 | 0.415 | **0.448** | 0.400 |
-| 0.10 | 0.368 | 0.370 | 0.342 | **0.405** | 0.325 |
-| 0.25 | 0.217 | 0.259 | 0.202 | **0.306** | 0.215 |
-| 0.50 | 0.090 | 0.151 | 0.089 | **0.211** | 0.148 |
-| 1.00 | 0.020 | 0.019 | 0.013 | **0.124** | 0.086 |
-
-Group analysis (spatial 12753 vs color 5404 submodels) -- "where does the flag live?":
-
-| rate | metric | baseline | p3 | all |
-|------|--------|----------|------|------|
-| 1.00 | spatial P_E | 0.021 | **0.177** | 0.138 |
-| 1.00 | color P_E   | 0.027 | 0.121 | **0.080** |
-| 0.05 | spatial P_E | 0.437 | 0.461 | 0.423 |
-| 0.05 | color P_E   | 0.416 | 0.432 | **0.376** |
-
-StegExpose (Fusion), test-250 (AUC; ~0.5 = blind):
-
-| config | AUC r=0.5 | AUC r=1.0 | P_E r=1.0 |
-|--------|-----------|-----------|-----------|
-| baseline | 0.524 | 0.548 | 0.442 |
-| p1 | 0.623 | 0.558 | 0.426 |
-| **p2** | 0.628 | **0.717** | **0.266** |
-| p3 | 0.527 | 0.546 | 0.446 |
-| all | 0.527 | 0.548 | 0.436 |
-
-Findings (honest -- the strongest attacker is only blunted, not defeated):
-
-- **ML remains the strongest attacker; no config blinds it.** At full rate the baseline
-  was almost perfectly caught (P_E 0.020); the full algorithm `all` moves that to
-  P_E 0.086 -- a real ~4x improvement, **not** invisibility. At operational low rates
-  (<=0.1) every config already sits near P_E 0.33-0.45, hard for any detector.
-- **P3 is the single biggest ML help** (as it was for chi-square): removing the flag
-  lifts ensemble P_E on every rate, most at r=1.0 (0.020 -> 0.124, ~6x).
-- **P2 does NOT help ML -- it slightly hurts** (r=1.0: 0.013 < baseline 0.020). The
-  same symmetric +/-1 that RS/SPA caught (Day 16) is also visible to SCRM. StegExpose
-  independently confirms it (p2 AUC 0.72 at r=1.0, while baseline/p3/all stay ~0.55).
-- **`all` (0.086) is worse than p3 alone (0.124) at r=1.0.** P2's added signal partly
-  cancels P3's gain -- the two improvements pull in opposite directions in ML feature
-  space, mirroring the classical-attack trade-off.
-- **The flag was a SPATIAL artifact, not primarily a color one (refines the hypothesis).**
-  We expected P3 to drop the *color/cross-channel* group (blue-channel flag). Instead
-  P3 lifts the **spatial** group most (r=1.0: 0.021 -> 0.177 vs color 0.027 -> 0.121):
-  the flag sits on every 3rd pixel's blue channel, so it reads as a spatial periodicity
-  that SCRM's h/v co-occurrences catch. Conversely **P2 lowers the color group** (r=0.05:
-  0.416 -> 0.382), i.e. the +/-1 matching is a cross-channel trace. The two improvements
-  touch different regions of the feature space -- direct evidence for their complementarity.
-- **StegExpose mirrors the classical story:** baseline blind, p2 partly visible at high
-  rate, P1 dilutes it so `all` returns to ~chance.
-
-Bottom line of the re-analysis (imperceptibility Day 15, classical Day 16, ML Day 17):
-the improved algorithm keeps the same imperceptibility, closes the two channels the
-baseline leaked (chi-square flag via P3, and it never leaked to RS/SPA), and blunts the
-learned detector at high rate -- but ML stays the residual forensic threat. The honest
-headline is *a much harder target across the whole spectrum, not an undetectable one*.
-
-Outputs: `results/{ml,ml_group,stegexpose}_reanalysis.csv` and
-`results/figures/{ml_pe,ml_auc,ml_group,stegexpose,all_attacks_comparison}_beforeafter.png`.
-
-## Reference methods (Day 18)
-
-"Our algorithm has ML P_E 0.086" means nothing without a yardstick: *0.086 versus
-what, for a classic LSB method and for a modern adaptive one?* Day 18 builds three
-reference methods on the SAME 500 covers / seed 42 / same rates, to be attacked in
-Day 19 next to our algorithm.
-
-- **LSB-R** (`reference/lsb_replacement.py`, we wrote it): classic LSB replacement,
-  `v -> (v & 0xFE) | bit`, value stays in its {2k, 2k+1} pair. This is the method
-  chi-square/RS/SPA were *designed* for -- our **positive control**: if those attacks
-  light up on LSB-R (and they largely missed our "+1"), that proves the attack code is
-  correct and the earlier misses were a property of the algorithm, not a bug.
-- **LSB-M** (`reference/lsb_matching.py`, we wrote it): symmetric +/-1 on mismatch
-  (edges 0->+1, 255->-1) -- the same idea as our P2.
-- **HILL** (adaptive, spatial): content-adaptive cost + simulated optimal embedding.
-  We use the **original authors' simulator** rather than reimplementing it.
-
-**Payload alignment (fair comparison).** Our rate `r` is a fraction of *our* capacity
-(chars x 8 bits); the references are parameterized in bits/bpc. So we give every
-reference the SAME ABSOLUTE payload our algorithm embeds at rate `r`
-(`reference/payload.py`, `results/reference_payload_mapping.csv`):
-
-| rate | chars | payload bits | bpc (bits/channel-sample) |
-|------|-------|--------------|---------------------------|
-| 0.05 | 1088 | 8 704 | 0.0443 |
-| 0.10 | 2176 | 17 408 | 0.0885 |
-| 0.25 | 5440 | 43 520 | 0.2214 |
-| 0.50 | 10880 | 87 040 | 0.4427 |
-| 1.00 | 21760 | 174 080 | 0.8854 |
-
-LSB-R/LSB-M embed at random positions (seed 42); HILL takes `payload = bpc`, which
-targets the same absolute bit count over the 196 608 channel-samples. LSB-R and LSB-M
-share the *same* positions and payload bits per (image, rate), so the only difference
-between them is replacement vs matching.
-
-**HILL provenance (for the thesis references).** `HILL_COLOR.m` is fetched via
-Aletheia's canonical resource repo
-(`github.com/daniellerch/aletheia-external-resources`, `octave/code/HILL_COLOR.m`),
-the same mechanism that provided `SCRMQ1.m`. Original code (c) 2014 Shenzhen
-University, author Ming Wang; method from **B. Li, M. Wang, J. Huang, X. Li, "A New
-Cost Function for Spatial Image Steganography", IEEE ICIP 2014**. Licensed for
-educational/research/non-profit use. It is natively color (`HILL_COLOR` embeds each
-RGB channel with its own cost), so no per-channel workaround was needed. We call it
-through our own `octave-cli` (bypassing Aletheia's PATH `octave`) with a seeded RNG
-for reproducibility.
-
-Generation is disk-safe (generate -> extract SCRM -> delete PNGs, per rate;
-`scripts/make_reference_sets.py`, `scripts/reference_extract.py`); features land in
-`data/alaska/features/{lsbr,lsbm,hill}/` (git-ignored). Sanity tests in
-`tests/test_reference.py` (|delta| <= 1, in-range, ~half of samples change, LSB-R
-stays in-pair). Attacks are Day 19 -- today only builds and verifies the sets.
-
-## Reference results + positive control (Day 19)
-
-The full attack apparatus (chi-square / RS / SPA / ML / StegExpose) run on the three
-reference methods, same harness / rates / protocol as everything else. Two payoffs:
-a **positive control** (proof the attacks work) and a **yardstick** (where our
-algorithm sits versus classic and state-of-the-art methods).
-
-**Positive control -- PASSES on two independent tools.** LSB-R is what chi-square /
-RS / SPA / StegExpose were designed for.
-- chi-square on LSB-R (test-250): **normally oriented**, AUC climbs 0.52 -> **0.955**
-  (r=1.0). Our baseline's chi-square was *inverted* (AUC 0.03); the contrast proves the
-  attack is correct and our inversion was a real flag artifact, not a bug.
-- RS / SPA on LSB-R: phat tracks the **true** embedding rate (r=1.0: RS phat 0.882,
-  SPA 0.885 vs true 0.885; **bias <= 0.007** at r>=0.5), AUC -> 1.0.
-- StegExpose on LSB-R: AUC **0.70 -> 0.99**; blind on LSB-M / HILL (~0.51).
-
-So on the method they target, the attacks detect strongly and estimate the true rate.
-Our earlier "misses" on the baseline "+1" were genuine algorithm properties.
-
-**Yardstick -- ML ensemble P_E (test protocol; higher = harder):**
-
-| rate | LSB-R | LSB-M | HILL | ours: all | ours: baseline |
-|------|-------|-------|------|-----------|----------------|
-| 0.05 | 0.373 | 0.374 | **0.478** | 0.400 | 0.431 |
-| 0.25 | 0.188 | 0.192 | **0.402** | 0.215 | 0.217 |
-| 1.00 | 0.080 | 0.087 | **0.199** | 0.086 | 0.020 |
-
-- **HILL (adaptive, state of the art) is by far the hardest** -- ~2.3x our `all` at
-  r=1.0 (0.199 vs 0.086). It hides in texture and is blind to chi-square/RS/SPA/
-  StegExpose (all ~0.5); only ML dents it. This is the honest placement: our authored
-  algorithm does not reach adaptive SOTA.
-- **Our `all` sits about level with plain LSB-R / LSB-M for ML** (r=1.0: 0.086 vs
-  0.080 / 0.087), and is slightly *harder* than them at low rates. So the three
-  improvements bring the algorithm to roughly classic-LSB detectability against the
-  learned detector -- while (unlike LSB-R) evading the structural attacks.
-
-**A correction to Day 16 (the reference comparison earned its keep).** Day 16 reported
-that our P2 (`pm_one`) "became visible to RS/SPA" (AUC ~0.86) and read that as the
-+/-1 matching. But the reference **LSB-M -- pure random +/-1 matching -- evades RS/SPA**
-(AUC 0.47 / 0.52), exactly as steganalysis theory predicts (RS/SPA target replacement).
-A controlled probe (`pm_one` WITH vs WITHOUT the flag, same covers) resolves it:
-
-| r=1.0 | RS AUC | SPA AUC |
-|-------|--------|---------|
-| pm_one + flag (= P2) | 0.857 | 0.858 |
-| pm_one, no flag | 0.469 | 0.520 |
-| LSB-M reference | 0.471 | 0.519 |
-
-So the RS/SPA signal was **not** the +/-1 matching but an **interaction of the
-continuation-flag with `pm_one`** (neither the flag alone -- baseline is blind at 0.50 --
-nor `pm_one` alone -- LSB-M is blind -- is detected; only the two together). This
-corrects two Day-16 statements: (1) it is the flag*pm_one interaction, not the matching;
-(2) `all` is RS/SPA-blind because it has **no flag** (P3/length_header), not because of
-"P1 dilution". Our matching, flag-free, is standard LSB matching (pm_one-no-flag 0.469
-~ LSB-M 0.471) and equally RS/SPA-invisible.
-
-Outputs: `results/{chisquare,rs,spa,ml,stegexpose,ml_group}_reference.csv`,
-`results/reference_payload_mapping.csv`, and
-`results/figures/{reference_chisquare_rs_spa,reference_ml_pe}.png`.
-
-## Filling two gaps before the matrix (Day 19b)
-
-An inserted day, before the Day-20 synthesis, so both results below enter the matrix
-as first-class rows/columns rather than forcing the matrix to be rebuilt later.
-
-### p13 = P1 + P3 (no P2)
-
-`StegoConfig(pixel_order="prng", termination="length_header")` -- every improvement
-except the +/-1 matching, keeping "+1" (and thus the 255-saturation bug, like
-baseline/p1/p3). Round-trip verified (5/5 on non-saturated covers). Measured through
-the full apparatus and appended to the `*_reanalysis.csv` (so config now ranges over
-baseline, p1, p2, p3, **p13**, all).
-
-ML ensemble P_E (higher = harder):
-
-| rate | baseline | p3 | **p13** | all |
-|------|----------|-----|---------|-----|
-| 0.25 | 0.217 | 0.306 | 0.260 | 0.215 |
-| 0.50 | 0.090 | 0.211 | 0.184 | 0.148 |
-| 1.00 | 0.020 | 0.124 | **0.125** | 0.086 |
-
-- **p13 is a near-twin of p3 across every attack.** At r=1.0: chi-square AUC 0.585 /
-  P_E 0.424 (flag-free, ~chance), RS 0.499 / SPA 0.518 (blind), StegExpose 0.550
-  (~chance), group P_E spatial 0.178 / color 0.123 -- all essentially identical to p3.
-- **p13 and p3 are the two most ML-resistant configs** (r=1.0 P_E ~0.125), clearly above
-  `all` (0.086, P2 hurts) and baseline (0.020).
-- **P1 (prng order) is detectability-neutral.** Adding it to p3 changes the marginal
-  SCRM statistics negligibly (it was designed to break *positional* structure, not the
-  marginal residual co-occurrences SCRM measures) -- and is a hair *more* detectable at
-  mid rates. So the most-resistant recipe is simply "flag-free + plus_one" (p3/p13); P1
-  contributes its positional property "for free" without changing detectability.
-
-### "+1-aware" attacks: a negative result (honest)
-
-We asked whether an adversary who knows the baseline always adds 1 can build a simple
-structural detector that fires on the directional "+1" but stays blind on symmetric
-+/-1 -- which would show the baseline's classical-attack evasion is *accidental*
-(direction-specific). We built four candidate detectors (`analysis/plus_one_aware.py`:
-residual sign asymmetry, directional histogram flow, odd/even step imbalance, SPA trace
-imbalance) and validated them on synthetic stego (`scripts/plus_one_aware_probe.py`,
-`results/plus_one_aware_probe.csv`).
-
-**None isolates "+1".** The ones that respond fire on *any* embedding (histogram flow:
-+1/lsbm/lsbr all ~0.60) or specifically on LSB *replacement* (odd/even step and SPA
-imbalance catch LSB-R at oriented AUC 0.95-0.98 -- a nice internal check that the probe
-works -- but miss "+1"). The directional "+1" signature, separated from the
-continuation-flag, is a very weak second-order histogram effect a cover-less statistic
-cannot robustly exploit.
-
-This reframes the Day-19b hypothesis honestly: the "+1" direction alone is **nearly as
-principally evasive as +/-1**, not accidentally so. Consistent with Days 16/19, the real
-classical-attack vulnerability of our stego was the **flag** (whose flag*pm_one
-interaction RS/SPA caught), not the matching direction. We report the negative result
-rather than forcing a weak attack into the comparison.
-
-Outputs: p13 appended to `results/{chisquare,rs,spa,ml,stegexpose,ml_group}_reanalysis.csv`
-(Day-16/17 figures regenerated to include p13); `results/plus_one_aware_probe.csv`.
-
-## The comparison matrix (Day 20)
-
-Synthesis, not new measurement (except the imperceptibility gap-fill for p13 + the three
-references, which had none). Every number in the tables/figures is pulled from one
-source of truth, `results/master_matrix.csv` (tidy: version, family, rate, attack,
-metric, value), assembled and sanity-checked by `scripts/build_matrix.py` -- known
-values (baseline ML P_E 0.020, all 0.086, p3 0.124, p13 0.125, HILL 0.199, LSB-R chi2
-AUC 0.955) all reproduce, no duplicates, no gaps.
-
-**Main table -- profile at full load (r=1.0).** Attacks are reported as **P_E**
-(orientation-agnostic, so one comparable number per attack); "what you pay" is global
-PSNR (comparable across methods) and round-trip failure. Best-in-column in **bold**;
-`~0.5` P_E means blind.
-
-| version | | PSNR_g dB | rt-fail | chi2 | RS | SPA | StegExpose | ML |
-|---------|--|-----------|---------|------|----|----|-----------|----|
-| baseline | ours | 51.17 | 0.26 | 0.092* | 0.47 | 0.44 | 0.44 | **0.020** |
-| p1 | ours | 51.17 | 0.25 | 0.092* | 0.45 | 0.44 | 0.43 | 0.019 |
-| p2 | ours | 51.15 | **0.0** | 0.092* | 0.13 | 0.14 | 0.27 | 0.013 |
-| p3 | ours | 51.69 | 0.26 | 0.42 | 0.45 | 0.46 | 0.45 | 0.124 |
-| p13 | ours | 51.69 | 0.25 | 0.42 | 0.47 | 0.47 | 0.44 | 0.125 |
-| **all** | ours | 51.67 | **0.0** | 0.40 | 0.47 | 0.45 | 0.44 | 0.086 |
-| LSB-R | ref | 51.67 | -- | 0.11 | **0.02** | **0.00** | **0.02** | 0.080 |
-| LSB-M | ref | 51.67 | -- | 0.38 | 0.47 | 0.46 | 0.46 | 0.087 |
-| HILL | ref | **54.95** | -- | 0.47 | 0.47 | 0.46 | 0.47 | **0.199** |
-
-\* baseline/p1/p2 chi-square is *inverted* (AUC ~0.03); P_E 0.092 counts it as detected.
-
-Full matrix: `results/master_matrix.csv` (all rates x metrics); flat main table:
-`results/main_table.csv`; rate-dependence figure: `results/figures/all_attacks_comparison_full.png`
-(P_E vs rate, 5 attacks x 9 versions -- our configs solid, references dashed).
-
-**Where our `all` stands.**
-- **vs LSB-R (positive control):** ML about equal (0.086 vs 0.080), but `all` is *blind*
-  to every structural attack (chi2/RS/SPA/StegExpose ~0.4-0.5) whereas LSB-R is caught by
-  all of them (RS 0.02, SPA 0.00, StegExpose 0.02). Our algorithm decisively beats classic
-  LSB replacement on structural evasion.
-- **vs LSB-M:** essentially a tie across the board (ML 0.086 vs 0.087; both structural-blind).
-  Our fully-improved algorithm lands at **LSB-matching-grade** undetectability.
-- **vs HILL (adaptive SOTA):** HILL is out of reach -- 2.3x harder for ML (0.199 vs 0.086)
-  *and* better quality.
-
-**HILL buys security AND quality (Day-20 decision B, measured).** We expected HILL to
-match our PSNR while being safer. It is actually *better* on both: at r=1.0 HILL is
-54.95 dB vs our ~51.7 dB, because adaptive costs change far fewer pixels for the same
-payload -- HILL flips **48%** of pixels, LSB and our methods **~83%**. On the pixels it
-does change the distortion is the same +/-1 (region PSNR ~52 dB for all), so the gain is
-pure embedding *efficiency*. This bounds our contribution honestly: a non-adaptive
-parity scheme has essentially exhausted what is achievable without a cost model -- our
-`all` reaches LSB-matching security at LSB quality, and closing the gap to HILL would
-require adaptivity (a cost function + coding), which is a different design.
-
-Bottom line of the whole study: the three improvements take the authored algorithm from
-"trivially and invertibly detectable" (baseline: chi2 flag + ML P_E 0.02) to
-"structural-attack-blind, LSB-matching-grade against ML" (all: P_E 0.086) at unchanged
-imperceptibility -- a large, honestly-bounded gain that stops short of adaptive SOTA.
-
-## Final print figures (Day 21)
-
-Presentation, not analysis: the print-ready figures for the thesis, all generated from
-`results/master_matrix.csv` (no hand-typed numbers). Style is defined once in
-`scripts/style.py` (version -> colour/marker/line, fixed legend order, Croatian display
-names, one full-page preset) and the figures are built by `scripts/make_final_figures.py`.
-Output goes to `results/figures/final/`, each as a vector **SVG** (text as paths, so the
-Croatian diacritics survive anywhere) and a 1200-DPI white-background **PNG**. Croatian
-labels live in the figures; filenames, CSV columns and code stay English.
-
-The 16 core figures (title -> thesis chapter):
-
-| file | naslov | poglavlje |
-|------|--------|-----------|
-| psnr_vs_rate | PSNR (globalni) po stopi | neprimjetnost |
-| psnr_beforeafter | PSNR (regija): prije i poslije | neprimjetnost |
-| ssim_beforeafter | SSIM: prije i poslije | neprimjetnost |
-| chisquare_auc_vs_rate | χ²: AUC i inverzija na osnovnom | klasična steganaliza |
-| chisquare_positional | Pozicijski χ² profil | klasična steganaliza |
-| rs_vs_spa_estimate | RS: procijenjena stopa | klasična steganaliza |
-| ml_pe_vs_rate | ML: detektabilnost svih verzija | strojno učenje |
-| ml_group_pe | ML značajke: osnovni algoritam | strojno učenje |
-| chisquare_aucB_beforeafter | χ² u plavom kanalu (AUC_B) | poboljšanja (dokaz P3) |
-| chisquare_pe_beforeafter | χ²: prije i poslije | poboljšanja |
-| rs_pe_beforeafter | RS: prije i poslije | poboljšanja |
-| ml_pe_beforeafter | ML: prije i poslije | poboljšanja |
-| ml_group_beforeafter | ML značajke prije i poslije | poboljšanja |
-| reference_chisquare_rs_spa | Napadi na referentne metode | reference (pozitivna kontrola) |
-| all_attacks_comparison_multi | Usporedba svih metoda i napada (po stopi) | središnja slika |
-| all_attacks_comparison_single | Profil pri punoj ugradnji (r=1.0) | središnja slika |
-
-The central comparison is provided in two forms: `_multi` (five panels, P_E vs rate) and
-`_single` (one panel, the r=1.0 profile). Two figures read a source CSV the matrix does
-not carry (flagged in code): `chisquare_positional` (positional p-values) and the ML
-`*_group_*` figures (spatial/color breakdown). The ad-hoc working figures from earlier
-days remain under `results/figures/` as the day-by-day record; the outdated
-`all_attacks_comparison_beforeafter.png` (no p13 / references) is moved to
-`results/figures/_archive/`.
-
-## Known baseline behaviors (confirmed Day 1)
-
-Recorded as a starting point for the improvement phase -- we *measure*, we
-do not criticize:
-
-1. **Non-ASCII characters** (e.g. `č`, `—`): `bin(ord(char)).zfill(8)` yields
-   >8 bits for ord>255 -> shifts the whole bit stream -> wrong reconstruction.
-   Tied to Improvement 3 (length header + correctness).
-2. **Saturated (255) cover/channels**: the algorithm skips channels at 255 ->
-   embedding is dropped, decoding reads garbage. Tied to Improvement 3
-   (255 edge-case fix).
-3. Plain ASCII on a non-saturated cover: **round-trip OK**.
-
-## References
-
-Sources for the implemented formulas (for citation in the written thesis).
-
-**Steganalysis methods** (`analysis/`):
-
-- **Chi-square / Pairs-of-Values attack** (Day 6, `analysis/chi_square.py`) --
-  A. Westfeld, A. Pfitzmann, "Attacks on Steganographic Systems," in *Information
-  Hiding*, LNCS 1768, Springer, 2000, pp. 61-76.
-- **RS analysis** (Day 7, `analysis/rs_analysis.py`) -- J. Fridrich, M. Goljan,
-  R. Du, "Reliable Detection of LSB Steganography in Color and Grayscale Images,"
-  in *Proc. ACM Workshop on Multimedia and Security*, 2001, pp. 27-30.
-- **Sample Pair Analysis** (Day 8, `analysis/spa.py`) -- S. Dumitrescu, X. Wu,
-  Z. Wang, "Detection of LSB Steganography via Sample Pair Analysis," *IEEE Trans.
-  Signal Processing*, vol. 51, no. 7, 2003.
-  Authors' copy (used for the equations):
-  <https://www.ece.mcmaster.ca/~sorina/papers/LSBfinalTSP.pdf>.
-  Trace-set / quadratic cross-check:
-  <https://steveryan.net/steganalysis-sample-pairs-analysis-explained.html>.
-  (Verify the exact page numbers against the source before citing -- indexed
-  listings disagree, e.g. pp. 1995-2007 vs pp. 355-372.)
-
-**Fidelity metrics** (Day 5, `lib/metrics.py`):
-
-- **SSIM** -- Z. Wang, A. C. Bovik, H. R. Sheikh, E. P. Simoncelli, "Image Quality
-  Assessment: From Error Visibility to Structural Similarity," *IEEE Trans. Image
-  Processing*, vol. 13, no. 4, 2004, pp. 600-612 (via scikit-image
-  `structural_similarity`).
-- **PSNR** -- standard peak-signal-to-noise ratio (peak = 255).
-- **Luminance (Y)** -- ITU-R Recommendation BT.601 (Y = 0.299R + 0.587G + 0.114B).
-
-**Dataset** (Day 4):
-
-- **ALASKA v2** -- R. Cogranne, Q. Giboulot, P. Bas, "ALASKA-2: Challenging
-  Academic Research on Steganalysis with Realistic Images," in *IEEE Int. Workshop
-  on Information Forensics and Security (WIFS)*, 2020. Dataset: <http://alaska.utt.fr>.
-
-All citation details (especially page numbers) should be verified against the
-primary sources before inclusion in the written work.
+## Reproducibility
+
+A full regeneration (dataset → stego → SCRM extraction → attacks → matrix) is ~10 hours,
+dominated by SCRM feature extraction. The committed CSVs let anyone reproduce every table
+and figure in seconds without that cost. Environment, exact pipeline, seeds, and known
+pitfalls are in **[docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md)**.
+
+## Results and figures
+
+The print-ready figures and what each one shows are indexed in
+**[docs/FIGURES.md](docs/FIGURES.md)**; the tables are in `results/tables/`.
+
+## Literature and licenses
+
+- HILL simulator: `HILL_COLOR.m` from Aletheia's resource repository; original code
+  © 2014 Shenzhen University (Ming Wang), from B. Li, M. Wang, J. Huang, X. Li,
+  *"A New Cost Function for Spatial Image Steganography"*, IEEE ICIP 2014. Licensed for
+  educational/research use.
+- SCRM features (`SCRMQ1.m`) and the ALASKA II dataset are used via their respective
+  sources (see docs/REPRODUCIBILITY.md).
+- Attacks implemented from their original papers: Westfeld & Pfitzmann (chi-square),
+  Fridrich et al. (RS), Dumitrescu, Wu & Wang (SPA).
