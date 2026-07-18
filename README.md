@@ -117,6 +117,28 @@ Run the tests:
 for t in tests/test_*.py; do python "$t"; done
 ```
 
+## Interactive demo
+
+A Streamlit app shows what the algorithm does under the hood and how detectable it is. It
+drives the same `lib`/`analysis` code the measurements use, so what it shows is what was
+measured. Six tabs: the embedding (cover vs stego, the ±1 difference amplified ×50, a
+heat-map of touched pixels, live PSNR/SSIM/MSE), the key (right passphrase recovers the
+message, wrong one yields noise), what each switch changes (P1 scatters *where* the writes
+land; P3 removes the flag and with it the odd-value bias in the blue channel), the attacks
+run live on the chosen image, and the measured results.
+
+Because a single image yields a *score* and not P_E (which is a statistic over 500 images),
+every live score is drawn against the measured cover/stego distributions for the same
+switches and rate, with a marker for where that image falls.
+
+```bash
+pip install -r requirements-demo.txt
+python -m streamlit run app/demo.py
+```
+
+The demo dependencies are kept separate from the measurement stack, so the pipeline stays
+runnable without Streamlit. Screenshots are in [docs/demo/](docs/demo/).
+
 ## Reproducibility
 
 A full regeneration (dataset → stego → SCRM extraction → attacks → matrix) is ~10 hours,
