@@ -33,3 +33,17 @@ record); `results/figures/_archive/` holds superseded or incomplete ones.
 
 The corresponding tables are in `results/tables/` (`main_table`, `imperceptibility`,
 `detectability_by_rate`, `reference_payload`), as CSV and Word-pasteable HTML.
+
+## Data-derived illustrations
+
+Four extra figures generated from one real ALASKA II cover (`00054.png`, fixed passphrase,
+rate 0.25) and the measured score distributions, in the same style
+(`scripts/report/make_illustration_figures.py`). The measured numbers are printed to stdout
+for the prose; none are drawn on the figures.
+
+| file | chapter | kind | what it shows |
+|------|---------|------|---------------|
+| illus_triptych_cover_stego_diff | 5.1 | data-derived illustration (single image) | cover, stego, and the difference amplified x50 -- invisible to the eye, the +/-1 noise in the embedded region |
+| illus_changemap_seq_vs_prng | 5.2 | data-derived illustration (single image) | the touched-pixel map: raster embedding fills a top band, PRNG scatters the same block count across the image |
+| illus_blue_odd_flag | 5.4 | data-derived illustration (single image) | the odd-value share per blue-channel value: with the flag it separates above 0.5 across the mid range, P3 brings it back to ~0.5 |
+| illus_chi_inversion_ecdf | 5.2 | data-derived (population distribution, 250 images) | ECDFs of the chi-square scores of covers vs stego (250-image test split): the stego curve lies above the covers' -> stego scores are lower (the inversion). A population distribution, not one image. |
